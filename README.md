@@ -208,7 +208,7 @@ comfy install
 
 ## Manual Install (Windows, Linux)
 
-Python 3.14 works but you may encounter issues with the torch compile node. The free threaded variant is still missing some dependencies.
+Python 3.14 works but some custom nodes may have issues. The free threaded variant works but some dependencies will enable the GIL so it's not fully supported.
 
 Python 3.13 is very well supported. If you have trouble with some custom node dependencies on 3.13 you can try 3.12
 
@@ -227,7 +227,7 @@ Put your VAE in: models/vae
 
 AMD users can install rocm and pytorch with pip if you don't have it already installed, this is the command to install the stable version:
 
-```pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.4```
+```pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm7.1```
 
 This is the command to install the nightly with ROCm 7.1 which might have some performance improvements:
 
