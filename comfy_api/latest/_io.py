@@ -326,11 +326,14 @@ class String(ComfyTypeIO):
         '''String input.'''
         def __init__(self, id: str, display_name: str=None, optional=False, tooltip: str=None, lazy: bool=None,
                     multiline=False, placeholder: str=None, default: str=None, dynamic_prompts: bool=None,
+                    min_length: int=None, max_length: int=None,
                     socketless: bool=None, force_input: bool=None, extra_dict=None, raw_link: bool=None, advanced: bool=None):
             super().__init__(id, display_name, optional, tooltip, lazy, default, socketless, None, force_input, extra_dict, raw_link, advanced)
             self.multiline = multiline
             self.placeholder = placeholder
             self.dynamic_prompts = dynamic_prompts
+            self.min_length = min_length
+            self.max_length = max_length
             self.default: str
 
         def as_dict(self):
@@ -338,6 +341,8 @@ class String(ComfyTypeIO):
                 "multiline": self.multiline,
                 "placeholder": self.placeholder,
                 "dynamicPrompts": self.dynamic_prompts,
+                "minLength": self.min_length,
+                "maxLength": self.max_length,
             })
 
 @comfytype(io_type="COMBO")
