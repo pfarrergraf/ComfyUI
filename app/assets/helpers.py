@@ -228,7 +228,7 @@ def normalize_tags(tags: list[str] | None) -> list[str]:
       - Stripping whitespace and converting to lowercase.
       - Removing duplicates.
     """
-    return [t.strip().lower() for t in (tags or []) if (t or "").strip()]
+    return list(dict.fromkeys(t.strip().lower() for t in (tags or []) if (t or "").strip()))
 
 def collect_models_files() -> list[str]:
     out: list[str] = []
