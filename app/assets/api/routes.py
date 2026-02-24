@@ -19,7 +19,7 @@ from app.assets.api.upload import (
     delete_temp_file_if_exists,
     parse_multipart_upload,
 )
-from app.assets.seeder import asset_seeder
+from app.assets.seeder import ScanInProgressError, asset_seeder
 from app.assets.services import (
     DependencyMissingError,
     HashMismatchError,
@@ -717,8 +717,9 @@ async def mark_missing_assets(request: web.Request) -> web.Response:
         200 OK with count of marked assets
         409 Conflict if a scan is currently running
     """
-    marked = asset_seeder.mark_missing_outside_prefixes()
-    if marked == 0 and asset_seeder.get_status().state.value != "IDLE":
+    try:
+        marked = asset_seeder.mark_missing_outside_prefixes()
+    except ScanInProgressError:
         return web.json_response(
             {"status": "scan_running", "marked": 0},
             status=409,

@@ -33,7 +33,7 @@ import node_helpers
 from comfyui_version import __version__
 from app.frontend_management import FrontendManager, parse_version
 from comfy_api.internal import _ComfyNodeInternal
-from app.assets.scanner import seed_assets
+from app.assets.seeder import asset_seeder
 from app.assets.api.routes import register_assets_system
 
 from app.user_manager import UserManager
@@ -697,10 +697,7 @@ class PromptServer():
 
         @routes.get("/object_info")
         async def get_object_info(request):
-            try:
-                seed_assets(["models"])
-            except Exception as e:
-                logging.error(f"Failed to seed assets: {e}")
+            asset_seeder.start(roots=("models", "input", "output"))
             with folder_paths.cache_helper:
                 out = {}
                 for x in nodes.NODE_CLASS_MAPPINGS:
