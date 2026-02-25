@@ -8,16 +8,15 @@ from app.assets.helpers import normalize_tags, select_best_live_path
 
 
 def get_comfy_models_folders() -> list[tuple[str, list[str]]]:
-    """Build list of (folder_name, base_paths[]) for model locations.
+    """Build list of (folder_name, base_paths[]) for all model locations.
 
-    Includes a category if any of its base paths lies under models_dir.
+    Includes every category registered in folder_names_and_paths,
+    regardless of whether its paths are under the main models_dir.
     """
     targets: list[tuple[str, list[str]]] = []
-    models_root = os.path.abspath(folder_paths.models_dir)
     for name, values in folder_paths.folder_names_and_paths.items():
-        # Unpack carefully to handle nodepacks that modify folder_paths
         paths, _exts = values[0], values[1]
-        if any(os.path.abspath(p).startswith(models_root + os.sep) for p in paths):
+        if paths:
             targets.append((name, paths))
     return targets
 
