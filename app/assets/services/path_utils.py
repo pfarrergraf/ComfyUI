@@ -7,14 +7,20 @@ from app.assets.database.queries import list_references_by_asset_id
 from app.assets.helpers import normalize_tags, select_best_live_path
 
 
+_NON_MODEL_FOLDER_NAMES = frozenset({"custom_nodes"})
+
+
 def get_comfy_models_folders() -> list[tuple[str, list[str]]]:
     """Build list of (folder_name, base_paths[]) for all model locations.
 
     Includes every category registered in folder_names_and_paths,
-    regardless of whether its paths are under the main models_dir.
+    regardless of whether its paths are under the main models_dir,
+    but excludes non-model entries like custom_nodes.
     """
     targets: list[tuple[str, list[str]]] = []
     for name, values in folder_paths.folder_names_and_paths.items():
+        if name in _NON_MODEL_FOLDER_NAMES:
+            continue
         paths, _exts = values[0], values[1]
         if paths:
             targets.append((name, paths))

@@ -28,6 +28,7 @@ from app.assets.services.bulk_ingest import (
 )
 from app.assets.services.file_utils import (
     get_mtime_ns,
+    is_visible,
     list_files_recursively,
     verify_file_unchanged,
 )
@@ -84,6 +85,8 @@ def collect_models_files() -> list[str]:
     for folder_name, bases in get_comfy_models_folders():
         rel_files = folder_paths.get_filename_list(folder_name) or []
         for rel_path in rel_files:
+            if not all(is_visible(part) for part in Path(rel_path).parts):
+                continue
             abs_path = folder_paths.get_full_path(folder_name, rel_path)
             if not abs_path:
                 continue
