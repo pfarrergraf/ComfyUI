@@ -53,13 +53,9 @@ def resolve_destination_from_tags(tags: list[str]) -> tuple[str, list[str]]:
 
 
 def validate_path_within_base(candidate: str, base: str) -> None:
-    cand_abs = os.path.abspath(candidate)
-    base_abs = os.path.abspath(base)
-    try:
-        common = os.path.commonpath([cand_abs, base_abs])
-    except Exception:
-        raise ValueError("invalid destination path")
-    if common != base_abs:
+    cand_abs = Path(os.path.abspath(candidate))
+    base_abs = Path(os.path.abspath(base))
+    if not cand_abs.is_relative_to(base_abs):
         raise ValueError("destination escapes base directory")
 
 
@@ -108,10 +104,7 @@ def get_asset_category_and_relative_path(
     fp_abs = os.path.abspath(file_path)
 
     def _check_is_within(child: str, parent: str) -> bool:
-        try:
-            return os.path.commonpath([child, parent]) == parent
-        except Exception:
-            return False
+        return Path(child).is_relative_to(parent)
 
     def _compute_relative(child: str, parent: str) -> str:
         return os.path.relpath(

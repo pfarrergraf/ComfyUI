@@ -1,7 +1,7 @@
-import contextlib
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Literal, TypedDict
 
 import folder_paths
@@ -89,12 +89,11 @@ def collect_models_files() -> list[str]:
                 continue
             abs_path = os.path.abspath(abs_path)
             allowed = False
+            abs_p = Path(abs_path)
             for b in bases:
-                base_abs = os.path.abspath(b)
-                with contextlib.suppress(ValueError):
-                    if os.path.commonpath([abs_path, base_abs]) == base_abs:
-                        allowed = True
-                        break
+                if abs_p.is_relative_to(os.path.abspath(b)):
+                    allowed = True
+                    break
             if allowed:
                 out.append(abs_path)
     return out
