@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.assets.seeder import AssetSeeder, Progress, ScanPhase, State
+from app.assets.seeder import AssetSeeder, Progress, ScanInProgressError, ScanPhase, State
 
 
 @pytest.fixture
@@ -410,7 +410,7 @@ class TestSeederMarkMissing:
             assert result == 5
             mock_mark.assert_called_once_with(["/models", "/input", "/output"])
 
-    def test_mark_missing_returns_zero_when_running(
+    def test_mark_missing_raises_when_running(
         self, fresh_seeder: AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
@@ -427,8 +427,8 @@ class TestSeederMarkMissing:
             fresh_seeder.start(roots=("models",))
             assert reached.wait(timeout=2.0)
 
-            result = fresh_seeder.mark_missing_outside_prefixes()
-            assert result == 0
+            with pytest.raises(ScanInProgressError):
+                fresh_seeder.mark_missing_outside_prefixes()
 
             barrier.set()
 
