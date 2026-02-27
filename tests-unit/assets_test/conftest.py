@@ -108,7 +108,7 @@ def comfy_url_and_proc(comfy_tmp_base_dir: Path, request: pytest.FixtureRequest)
             "main.py",
             f"--base-directory={str(comfy_tmp_base_dir)}",
             f"--database-url={db_url}",
-            "--disable-assets-autoscan",
+            "--enable-assets",
             "--listen",
             "127.0.0.1",
             "--port",

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -636,22 +637,12 @@ async def seed_assets(request: web.Request) -> web.Response:
     wait_param = request.query.get("wait", "").lower()
     should_wait = wait_param in ("true", "1", "yes")
 
-    # Temporarily enable seeder for explicit API calls (--disable-assets-autoscan
-    # only prevents the automatic startup scan, not manual triggers)
-    was_disabled = asset_seeder.is_disabled()
-    if was_disabled:
-        asset_seeder.enable()
-
     started = asset_seeder.start(roots=valid_roots)
     if not started:
-        if was_disabled:
-            asset_seeder.disable()
         return web.json_response({"status": "already_running"}, status=409)
 
     if should_wait:
-        asset_seeder.wait()
-        if was_disabled:
-            asset_seeder.disable()
+        await asyncio.to_thread(asset_seeder.wait)
         status = asset_seeder.get_status()
         return web.json_response(
             {
@@ -666,11 +657,6 @@ async def seed_assets(request: web.Request) -> web.Response:
             },
             status=200,
         )
-
-    # Re-disable after starting: the running thread doesn't check _disabled,
-    # so this only prevents new scans from auto-starting while this one runs.
-    if was_disabled:
-        asset_seeder.disable()
 
     return web.json_response({"status": "started"}, status=202)
 

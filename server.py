@@ -239,7 +239,8 @@ class PromptServer():
             else args.front_end_root
         )
         logging.info(f"[Prompt Server] web root: {self.web_root}")
-        register_assets_system(self.app, self.user_manager)
+        if args.enable_assets:
+            register_assets_system(self.app, self.user_manager)
         routes = web.RouteTableDef()
         self.routes = routes
         self.last_node_id = None
