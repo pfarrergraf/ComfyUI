@@ -65,6 +65,8 @@ class ImageCropV2(IO.ComfyNode):
             outputs=[IO.Image.Output()],
         )
 
+    OUTPUT_NODE = True
+
     @classmethod
     def execute(cls, image, crop_region) -> IO.NodeOutput:
         x = crop_region.get("x", 0)
