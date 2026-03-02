@@ -60,12 +60,7 @@ class PainterNode(io.ComfyNode):
                     socketless=True,
                     extra_dict={"hidden": True},
                 ),
-                io.String.Input(
-                    "bg_color",
-                    default="#000000",
-                    socketless=True,
-                    extra_dict={"hidden": True, "widgetType": "COLOR"},
-                ),
+                io.Color.Input("bg_color", default="#000000"),
             ],
             outputs=[
                 io.Image.Output("IMAGE"),
