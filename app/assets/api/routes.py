@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -39,6 +40,20 @@ from app.assets.services import (
 
 ROUTES = web.RouteTableDef()
 USER_MANAGER: user_manager.UserManager | None = None
+_ASSETS_ENABLED = False
+
+
+def _require_assets_feature_enabled(handler):
+    @functools.wraps(handler)
+    async def wrapper(request: web.Request) -> web.Response:
+        if not _ASSETS_ENABLED:
+            return _build_error_response(
+                503,
+                "SERVICE_DISABLED",
+                "Assets system is disabled. Start the server with --enable-assets to use this feature.",
+            )
+        return await handler(request)
+    return wrapper
 
 # UUID regex (canonical hyphenated form, case-insensitive)
 UUID_RE = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -64,11 +79,13 @@ def get_query_dict(request: web.Request) -> dict[str, Any]:
 # do not rely on the code in /app/assets remaining the same.
 
 
-def register_assets_system(
-    app: web.Application, user_manager_instance: user_manager.UserManager
+def register_assets_routes(
+    app: web.Application, user_manager_instance: user_manager.UserManager | None = None,
 ) -> None:
-    global USER_MANAGER
-    USER_MANAGER = user_manager_instance
+    global USER_MANAGER, _ASSETS_ENABLED
+    if user_manager_instance is not None:
+        USER_MANAGER = user_manager_instance
+        _ASSETS_ENABLED = True
     app.add_routes(ROUTES)
 
 
@@ -96,6 +113,7 @@ def _validate_sort_field(requested: str | None) -> str:
 
 
 @ROUTES.head("/api/assets/hash/{hash}")
+@_require_assets_feature_enabled
 async def head_asset_by_hash(request: web.Request) -> web.Response:
     hash_str = request.match_info.get("hash", "").strip().lower()
     if not hash_str or ":" not in hash_str:
@@ -116,6 +134,7 @@ async def head_asset_by_hash(request: web.Request) -> web.Response:
 
 
 @ROUTES.get("/api/assets")
+@_require_assets_feature_enabled
 async def list_assets_route(request: web.Request) -> web.Response:
     """
     GET request to list assets.
@@ -166,6 +185,7 @@ async def list_assets_route(request: web.Request) -> web.Response:
 
 
 @ROUTES.get(f"/api/assets/{{id:{UUID_RE}}}")
+@_require_assets_feature_enabled
 async def get_asset_route(request: web.Request) -> web.Response:
     """
     GET request to get an asset's info as JSON.
@@ -211,6 +231,7 @@ async def get_asset_route(request: web.Request) -> web.Response:
 
 
 @ROUTES.get(f"/api/assets/{{id:{UUID_RE}}}/content")
+@_require_assets_feature_enabled
 async def download_asset_content(request: web.Request) -> web.Response:
     disposition = request.query.get("disposition", "attachment").lower().strip()
     if disposition not in {"inline", "attachment"}:
@@ -264,6 +285,7 @@ async def download_asset_content(request: web.Request) -> web.Response:
 
 
 @ROUTES.post("/api/assets/from-hash")
+@_require_assets_feature_enabled
 async def create_asset_from_hash_route(request: web.Request) -> web.Response:
     try:
         payload = await request.json()
@@ -304,6 +326,7 @@ async def create_asset_from_hash_route(request: web.Request) -> web.Response:
 
 
 @ROUTES.post("/api/assets")
+@_require_assets_feature_enabled
 async def upload_asset(request: web.Request) -> web.Response:
     """Multipart/form-data endpoint for Asset uploads."""
     try:
@@ -408,6 +431,7 @@ async def upload_asset(request: web.Request) -> web.Response:
 
 
 @ROUTES.put(f"/api/assets/{{id:{UUID_RE}}}")
+@_require_assets_feature_enabled
 async def update_asset_route(request: web.Request) -> web.Response:
     reference_id = str(uuid.UUID(request.match_info["id"]))
     try:
@@ -453,6 +477,7 @@ async def update_asset_route(request: web.Request) -> web.Response:
 
 
 @ROUTES.delete(f"/api/assets/{{id:{UUID_RE}}}")
+@_require_assets_feature_enabled
 async def delete_asset_route(request: web.Request) -> web.Response:
     reference_id = str(uuid.UUID(request.match_info["id"]))
     delete_content_param = request.query.get("delete_content")
@@ -484,6 +509,7 @@ async def delete_asset_route(request: web.Request) -> web.Response:
 
 
 @ROUTES.get("/api/tags")
+@_require_assets_feature_enabled
 async def get_tags(request: web.Request) -> web.Response:
     """
     GET request to list all tags based on query parameters.
@@ -520,6 +546,7 @@ async def get_tags(request: web.Request) -> web.Response:
 
 
 @ROUTES.post(f"/api/assets/{{id:{UUID_RE}}}/tags")
+@_require_assets_feature_enabled
 async def add_asset_tags(request: web.Request) -> web.Response:
     reference_id = str(uuid.UUID(request.match_info["id"]))
     try:
@@ -569,6 +596,7 @@ async def add_asset_tags(request: web.Request) -> web.Response:
 
 
 @ROUTES.delete(f"/api/assets/{{id:{UUID_RE}}}/tags")
+@_require_assets_feature_enabled
 async def delete_asset_tags(request: web.Request) -> web.Response:
     reference_id = str(uuid.UUID(request.match_info["id"]))
     try:
@@ -613,6 +641,7 @@ async def delete_asset_tags(request: web.Request) -> web.Response:
 
 
 @ROUTES.post("/api/assets/seed")
+@_require_assets_feature_enabled
 async def seed_assets(request: web.Request) -> web.Response:
     """Trigger asset seeding for specified roots (models, input, output).
 
@@ -662,6 +691,7 @@ async def seed_assets(request: web.Request) -> web.Response:
 
 
 @ROUTES.get("/api/assets/seed/status")
+@_require_assets_feature_enabled
 async def get_seed_status(request: web.Request) -> web.Response:
     """Get current scan status and progress."""
     status = asset_seeder.get_status()
@@ -683,6 +713,7 @@ async def get_seed_status(request: web.Request) -> web.Response:
 
 
 @ROUTES.post("/api/assets/seed/cancel")
+@_require_assets_feature_enabled
 async def cancel_seed(request: web.Request) -> web.Response:
     """Request cancellation of in-progress scan."""
     cancelled = asset_seeder.cancel()
@@ -692,6 +723,7 @@ async def cancel_seed(request: web.Request) -> web.Response:
 
 
 @ROUTES.post("/api/assets/prune")
+@_require_assets_feature_enabled
 async def mark_missing_assets(request: web.Request) -> web.Response:
     """Mark assets as missing when outside all known root prefixes.
 

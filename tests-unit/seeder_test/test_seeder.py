@@ -1,19 +1,18 @@
-"""Unit tests for the AssetSeeder background scanning class."""
+"""Unit tests for the _AssetSeeder background scanning class."""
 
 import threading
 from unittest.mock import patch
 
 import pytest
 
-from app.assets.seeder import AssetSeeder, Progress, ScanInProgressError, ScanPhase, State
+from app.assets.database.queries.asset_reference import UnenrichedReferenceRow
+from app.assets.seeder import _AssetSeeder, Progress, ScanInProgressError, ScanPhase, State
 
 
 @pytest.fixture
 def fresh_seeder():
-    """Create a fresh AssetSeeder instance for testing (bypasses singleton)."""
-    seeder = object.__new__(AssetSeeder)
-    seeder._initialized = False
-    seeder.__init__()
+    """Create a fresh _AssetSeeder instance for testing."""
+    seeder = _AssetSeeder()
     yield seeder
     seeder.shutdown(timeout=1.0)
 
@@ -25,7 +24,7 @@ def mock_dependencies():
         patch("app.assets.seeder.dependencies_available", return_value=True),
         patch("app.assets.seeder.sync_root_safely", return_value=set()),
         patch("app.assets.seeder.collect_paths_for_roots", return_value=[]),
-        patch("app.assets.seeder.build_stub_specs", return_value=([], set(), 0)),
+        patch("app.assets.seeder.build_asset_specs", return_value=([], set(), 0)),
         patch("app.assets.seeder.insert_asset_specs", return_value=0),
         patch("app.assets.seeder.get_unenriched_assets_for_roots", return_value=[]),
         patch("app.assets.seeder.enrich_assets_batch", return_value=(0, 0)),
@@ -36,11 +35,11 @@ def mock_dependencies():
 class TestSeederStateTransitions:
     """Test state machine transitions."""
 
-    def test_initial_state_is_idle(self, fresh_seeder: AssetSeeder):
+    def test_initial_state_is_idle(self, fresh_seeder: _AssetSeeder):
         assert fresh_seeder.get_status().state == State.IDLE
 
     def test_start_transitions_to_running(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -61,7 +60,7 @@ class TestSeederStateTransitions:
             barrier.set()
 
     def test_start_while_running_returns_false(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -83,7 +82,7 @@ class TestSeederStateTransitions:
             barrier.set()
 
     def test_cancel_transitions_to_cancelling(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -105,12 +104,12 @@ class TestSeederStateTransitions:
 
             barrier.set()
 
-    def test_cancel_when_idle_returns_false(self, fresh_seeder: AssetSeeder):
+    def test_cancel_when_idle_returns_false(self, fresh_seeder: _AssetSeeder):
         cancelled = fresh_seeder.cancel()
         assert cancelled is False
 
     def test_state_returns_to_idle_after_completion(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         fresh_seeder.start(roots=("models",))
         completed = fresh_seeder.wait(timeout=5.0)
@@ -122,7 +121,7 @@ class TestSeederWait:
     """Test wait() behavior."""
 
     def test_wait_blocks_until_complete(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         fresh_seeder.start(roots=("models",))
         completed = fresh_seeder.wait(timeout=5.0)
@@ -130,7 +129,7 @@ class TestSeederWait:
         assert fresh_seeder.get_status().state == State.IDLE
 
     def test_wait_returns_false_on_timeout(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
 
@@ -147,7 +146,7 @@ class TestSeederWait:
 
             barrier.set()
 
-    def test_wait_when_idle_returns_true(self, fresh_seeder: AssetSeeder):
+    def test_wait_when_idle_returns_true(self, fresh_seeder: _AssetSeeder):
         completed = fresh_seeder.wait(timeout=1.0)
         assert completed is True
 
@@ -156,7 +155,7 @@ class TestSeederProgress:
     """Test progress tracking."""
 
     def test_get_status_returns_progress_during_scan(
-        self, fresh_seeder: AssetSeeder
+        self, fresh_seeder: _AssetSeeder
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -172,7 +171,7 @@ class TestSeederProgress:
             patch("app.assets.seeder.dependencies_available", return_value=True),
             patch("app.assets.seeder.sync_root_safely", return_value=set()),
             patch("app.assets.seeder.collect_paths_for_roots", return_value=paths),
-            patch("app.assets.seeder.build_stub_specs", side_effect=slow_build),
+            patch("app.assets.seeder.build_asset_specs", side_effect=slow_build),
             patch("app.assets.seeder.insert_asset_specs", return_value=0),
             patch("app.assets.seeder.get_unenriched_assets_for_roots", return_value=[]),
             patch("app.assets.seeder.enrich_assets_batch", return_value=(0, 0)),
@@ -188,7 +187,7 @@ class TestSeederProgress:
             barrier.set()
 
     def test_progress_callback_is_invoked(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         progress_updates: list[Progress] = []
 
@@ -209,7 +208,7 @@ class TestSeederCancellation:
     """Test cancellation behavior."""
 
     def test_scan_commits_partial_progress_on_cancellation(
-        self, fresh_seeder: AssetSeeder
+        self, fresh_seeder: _AssetSeeder
     ):
         insert_count = 0
         barrier = threading.Event()
@@ -245,7 +244,7 @@ class TestSeederCancellation:
             patch("app.assets.seeder.sync_root_safely", return_value=set()),
             patch("app.assets.seeder.collect_paths_for_roots", return_value=paths),
             patch(
-                "app.assets.seeder.build_stub_specs", return_value=(specs, set(), 0)
+                "app.assets.seeder.build_asset_specs", return_value=(specs, set(), 0)
             ),
             patch("app.assets.seeder.insert_asset_specs", side_effect=slow_insert),
             patch("app.assets.seeder.get_unenriched_assets_for_roots", return_value=[]),
@@ -264,7 +263,7 @@ class TestSeederCancellation:
 class TestSeederErrorHandling:
     """Test error handling behavior."""
 
-    def test_database_errors_captured_in_status(self, fresh_seeder: AssetSeeder):
+    def test_database_errors_captured_in_status(self, fresh_seeder: _AssetSeeder):
         with (
             patch("app.assets.seeder.dependencies_available", return_value=True),
             patch("app.assets.seeder.sync_root_safely", return_value=set()),
@@ -273,7 +272,7 @@ class TestSeederErrorHandling:
                 return_value=["/path/file.safetensors"],
             ),
             patch(
-                "app.assets.seeder.build_stub_specs",
+                "app.assets.seeder.build_asset_specs",
                 return_value=(
                     [
                         {
@@ -307,7 +306,7 @@ class TestSeederErrorHandling:
             assert "DB connection failed" in status.errors[0]
 
     def test_dependencies_unavailable_captured_in_errors(
-        self, fresh_seeder: AssetSeeder
+        self, fresh_seeder: _AssetSeeder
     ):
         with patch("app.assets.seeder.dependencies_available", return_value=False):
             fresh_seeder.start(roots=("models",))
@@ -317,7 +316,7 @@ class TestSeederErrorHandling:
             assert len(status.errors) > 0
             assert "dependencies" in status.errors[0].lower()
 
-    def test_thread_crash_resets_state_to_idle(self, fresh_seeder: AssetSeeder):
+    def test_thread_crash_resets_state_to_idle(self, fresh_seeder: _AssetSeeder):
         with (
             patch("app.assets.seeder.dependencies_available", return_value=True),
             patch(
@@ -337,7 +336,7 @@ class TestSeederThreadSafety:
     """Test thread safety of concurrent operations."""
 
     def test_concurrent_start_calls_spawn_only_one_thread(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
 
@@ -364,7 +363,7 @@ class TestSeederThreadSafety:
             assert sum(results) == 1
 
     def test_get_status_safe_during_scan(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -395,7 +394,7 @@ class TestSeederThreadSafety:
 class TestSeederMarkMissing:
     """Test mark_missing_outside_prefixes behavior."""
 
-    def test_mark_missing_when_idle(self, fresh_seeder: AssetSeeder):
+    def test_mark_missing_when_idle(self, fresh_seeder: _AssetSeeder):
         with (
             patch("app.assets.seeder.dependencies_available", return_value=True),
             patch(
@@ -411,7 +410,7 @@ class TestSeederMarkMissing:
             mock_mark.assert_called_once_with(["/models", "/input", "/output"])
 
     def test_mark_missing_raises_when_running(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -433,14 +432,14 @@ class TestSeederMarkMissing:
             barrier.set()
 
     def test_mark_missing_returns_zero_when_dependencies_unavailable(
-        self, fresh_seeder: AssetSeeder
+        self, fresh_seeder: _AssetSeeder
     ):
         with patch("app.assets.seeder.dependencies_available", return_value=False):
             result = fresh_seeder.mark_missing_outside_prefixes()
             assert result == 0
 
     def test_prune_first_flag_triggers_mark_missing_before_scan(
-        self, fresh_seeder: AssetSeeder
+        self, fresh_seeder: _AssetSeeder
     ):
         call_order = []
 
@@ -458,7 +457,7 @@ class TestSeederMarkMissing:
             patch("app.assets.seeder.mark_missing_outside_prefixes_safely", side_effect=track_mark),
             patch("app.assets.seeder.sync_root_safely", side_effect=track_sync),
             patch("app.assets.seeder.collect_paths_for_roots", return_value=[]),
-            patch("app.assets.seeder.build_stub_specs", return_value=([], set(), 0)),
+            patch("app.assets.seeder.build_asset_specs", return_value=([], set(), 0)),
             patch("app.assets.seeder.insert_asset_specs", return_value=0),
             patch("app.assets.seeder.get_unenriched_assets_for_roots", return_value=[]),
             patch("app.assets.seeder.enrich_assets_batch", return_value=(0, 0)),
@@ -473,7 +472,7 @@ class TestSeederMarkMissing:
 class TestSeederPhases:
     """Test phased scanning behavior."""
 
-    def test_start_fast_only_runs_fast_phase(self, fresh_seeder: AssetSeeder):
+    def test_start_fast_only_runs_fast_phase(self, fresh_seeder: _AssetSeeder):
         """Verify start_fast only runs the fast phase."""
         fast_called = []
         enrich_called = []
@@ -490,7 +489,7 @@ class TestSeederPhases:
             patch("app.assets.seeder.dependencies_available", return_value=True),
             patch("app.assets.seeder.sync_root_safely", return_value=set()),
             patch("app.assets.seeder.collect_paths_for_roots", return_value=[]),
-            patch("app.assets.seeder.build_stub_specs", side_effect=track_fast),
+            patch("app.assets.seeder.build_asset_specs", side_effect=track_fast),
             patch("app.assets.seeder.insert_asset_specs", return_value=0),
             patch("app.assets.seeder.get_unenriched_assets_for_roots", side_effect=track_enrich),
             patch("app.assets.seeder.enrich_assets_batch", return_value=(0, 0)),
@@ -501,7 +500,7 @@ class TestSeederPhases:
             assert len(fast_called) == 1
             assert len(enrich_called) == 0
 
-    def test_start_enrich_only_runs_enrich_phase(self, fresh_seeder: AssetSeeder):
+    def test_start_enrich_only_runs_enrich_phase(self, fresh_seeder: _AssetSeeder):
         """Verify start_enrich only runs the enrich phase."""
         fast_called = []
         enrich_called = []
@@ -518,7 +517,7 @@ class TestSeederPhases:
             patch("app.assets.seeder.dependencies_available", return_value=True),
             patch("app.assets.seeder.sync_root_safely", return_value=set()),
             patch("app.assets.seeder.collect_paths_for_roots", return_value=[]),
-            patch("app.assets.seeder.build_stub_specs", side_effect=track_fast),
+            patch("app.assets.seeder.build_asset_specs", side_effect=track_fast),
             patch("app.assets.seeder.insert_asset_specs", return_value=0),
             patch("app.assets.seeder.get_unenriched_assets_for_roots", side_effect=track_enrich),
             patch("app.assets.seeder.enrich_assets_batch", return_value=(0, 0)),
@@ -529,7 +528,7 @@ class TestSeederPhases:
             assert len(fast_called) == 0
             assert len(enrich_called) == 1
 
-    def test_full_scan_runs_both_phases(self, fresh_seeder: AssetSeeder):
+    def test_full_scan_runs_both_phases(self, fresh_seeder: _AssetSeeder):
         """Verify full scan runs both fast and enrich phases."""
         fast_called = []
         enrich_called = []
@@ -546,7 +545,7 @@ class TestSeederPhases:
             patch("app.assets.seeder.dependencies_available", return_value=True),
             patch("app.assets.seeder.sync_root_safely", return_value=set()),
             patch("app.assets.seeder.collect_paths_for_roots", return_value=[]),
-            patch("app.assets.seeder.build_stub_specs", side_effect=track_fast),
+            patch("app.assets.seeder.build_asset_specs", side_effect=track_fast),
             patch("app.assets.seeder.insert_asset_specs", return_value=0),
             patch("app.assets.seeder.get_unenriched_assets_for_roots", side_effect=track_enrich),
             patch("app.assets.seeder.enrich_assets_batch", return_value=(0, 0)),
@@ -562,7 +561,7 @@ class TestSeederPauseResume:
     """Test pause/resume behavior."""
 
     def test_pause_transitions_to_paused(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -584,12 +583,12 @@ class TestSeederPauseResume:
 
             barrier.set()
 
-    def test_pause_when_idle_returns_false(self, fresh_seeder: AssetSeeder):
+    def test_pause_when_idle_returns_false(self, fresh_seeder: _AssetSeeder):
         paused = fresh_seeder.pause()
         assert paused is False
 
     def test_resume_returns_to_running(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -615,7 +614,7 @@ class TestSeederPauseResume:
             barrier.set()
 
     def test_resume_when_not_paused_returns_false(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -637,7 +636,7 @@ class TestSeederPauseResume:
             barrier.set()
 
     def test_cancel_while_paused_works(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached_checkpoint = threading.Event()
@@ -667,7 +666,7 @@ class TestSeederStopRestart:
     """Test stop and restart behavior."""
 
     def test_stop_is_alias_for_cancel(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -690,7 +689,7 @@ class TestSeederStopRestart:
             barrier.set()
 
     def test_restart_cancels_and_starts_new_scan(
-        self, fresh_seeder: AssetSeeder, mock_dependencies
+        self, fresh_seeder: _AssetSeeder, mock_dependencies
     ):
         barrier = threading.Event()
         reached = threading.Event()
@@ -717,7 +716,7 @@ class TestSeederStopRestart:
             fresh_seeder.wait(timeout=5.0)
             assert start_count == 2
 
-    def test_restart_preserves_previous_params(self, fresh_seeder: AssetSeeder):
+    def test_restart_preserves_previous_params(self, fresh_seeder: _AssetSeeder):
         """Verify restart uses previous params when not overridden."""
         collected_roots = []
 
@@ -729,7 +728,7 @@ class TestSeederStopRestart:
             patch("app.assets.seeder.dependencies_available", return_value=True),
             patch("app.assets.seeder.sync_root_safely", return_value=set()),
             patch("app.assets.seeder.collect_paths_for_roots", side_effect=track_collect),
-            patch("app.assets.seeder.build_stub_specs", return_value=([], set(), 0)),
+            patch("app.assets.seeder.build_asset_specs", return_value=([], set(), 0)),
             patch("app.assets.seeder.insert_asset_specs", return_value=0),
             patch("app.assets.seeder.get_unenriched_assets_for_roots", return_value=[]),
             patch("app.assets.seeder.enrich_assets_batch", return_value=(0, 0)),
@@ -744,7 +743,7 @@ class TestSeederStopRestart:
             assert collected_roots[0] == ("input", "output")
             assert collected_roots[1] == ("input", "output")
 
-    def test_restart_can_override_params(self, fresh_seeder: AssetSeeder):
+    def test_restart_can_override_params(self, fresh_seeder: _AssetSeeder):
         """Verify restart can override previous params."""
         collected_roots = []
 
@@ -756,7 +755,7 @@ class TestSeederStopRestart:
             patch("app.assets.seeder.dependencies_available", return_value=True),
             patch("app.assets.seeder.sync_root_safely", return_value=set()),
             patch("app.assets.seeder.collect_paths_for_roots", side_effect=track_collect),
-            patch("app.assets.seeder.build_stub_specs", return_value=([], set(), 0)),
+            patch("app.assets.seeder.build_asset_specs", return_value=([], set(), 0)),
             patch("app.assets.seeder.insert_asset_specs", return_value=0),
             patch("app.assets.seeder.get_unenriched_assets_for_roots", return_value=[]),
             patch("app.assets.seeder.enrich_assets_batch", return_value=(0, 0)),
@@ -770,3 +769,132 @@ class TestSeederStopRestart:
             assert len(collected_roots) == 2
             assert collected_roots[0] == ("models",)
             assert collected_roots[1] == ("input",)
+
+
+def _make_row(ref_id: str, asset_id: str = "a1") -> UnenrichedReferenceRow:
+    return UnenrichedReferenceRow(
+        reference_id=ref_id, asset_id=asset_id,
+        file_path=f"/fake/{ref_id}.bin", enrichment_level=0,
+    )
+
+
+class TestEnrichPhaseDefensiveLogic:
+    """Test skip_ids filtering and consecutive_empty termination."""
+
+    def test_failed_refs_are_skipped_on_subsequent_batches(
+        self, fresh_seeder: _AssetSeeder,
+    ):
+        """References that fail enrichment are filtered out of future batches."""
+        row_a = _make_row("r1")
+        row_b = _make_row("r2")
+        call_count = 0
+
+        def fake_get_unenriched(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                return [row_a, row_b]
+            return []
+
+        enriched_refs: list[list[str]] = []
+
+        def fake_enrich(rows, **kwargs):
+            ref_ids = [r.reference_id for r in rows]
+            enriched_refs.append(ref_ids)
+            # r1 always fails, r2 succeeds
+            failed = [r.reference_id for r in rows if r.reference_id == "r1"]
+            enriched = len(rows) - len(failed)
+            return enriched, failed
+
+        with (
+            patch("app.assets.seeder.dependencies_available", return_value=True),
+            patch("app.assets.seeder.sync_root_safely", return_value=set()),
+            patch("app.assets.seeder.collect_paths_for_roots", return_value=[]),
+            patch("app.assets.seeder.build_asset_specs", return_value=([], set(), 0)),
+            patch("app.assets.seeder.insert_asset_specs", return_value=0),
+            patch("app.assets.seeder.get_unenriched_assets_for_roots", side_effect=fake_get_unenriched),
+            patch("app.assets.seeder.enrich_assets_batch", side_effect=fake_enrich),
+        ):
+            fresh_seeder.start(roots=("models",), phase=ScanPhase.ENRICH)
+            fresh_seeder.wait(timeout=5.0)
+
+        # First batch: both refs attempted
+        assert "r1" in enriched_refs[0]
+        assert "r2" in enriched_refs[0]
+        # Second batch: r1 filtered out
+        assert "r1" not in enriched_refs[1]
+        assert "r2" in enriched_refs[1]
+
+    def test_stops_after_consecutive_empty_batches(
+        self, fresh_seeder: _AssetSeeder,
+    ):
+        """Enrich phase terminates after 3 consecutive batches with zero progress."""
+        row = _make_row("r1")
+        batch_count = 0
+
+        def fake_get_unenriched(*args, **kwargs):
+            nonlocal batch_count
+            batch_count += 1
+            # Always return the same row (simulating a permanently failing ref)
+            return [row]
+
+        def fake_enrich(rows, **kwargs):
+            # Always fail — zero enriched, all failed
+            return 0, [r.reference_id for r in rows]
+
+        with (
+            patch("app.assets.seeder.dependencies_available", return_value=True),
+            patch("app.assets.seeder.sync_root_safely", return_value=set()),
+            patch("app.assets.seeder.collect_paths_for_roots", return_value=[]),
+            patch("app.assets.seeder.build_asset_specs", return_value=([], set(), 0)),
+            patch("app.assets.seeder.insert_asset_specs", return_value=0),
+            patch("app.assets.seeder.get_unenriched_assets_for_roots", side_effect=fake_get_unenriched),
+            patch("app.assets.seeder.enrich_assets_batch", side_effect=fake_enrich),
+        ):
+            fresh_seeder.start(roots=("models",), phase=ScanPhase.ENRICH)
+            fresh_seeder.wait(timeout=5.0)
+
+        # Should stop after exactly 3 consecutive empty batches
+        # Batch 1: returns row, enrich fails → filtered out in batch 2+
+        # But get_unenriched keeps returning it, filter removes it → empty → break
+        # Actually: batch 1 has row, fails. Batch 2 get_unenriched returns [row],
+        # skip_ids filters it → empty list → breaks via `if not unenriched: break`
+        # So it terminates in 2 calls to get_unenriched.
+        assert batch_count == 2
+
+    def test_consecutive_empty_counter_resets_on_success(
+        self, fresh_seeder: _AssetSeeder,
+    ):
+        """A successful batch resets the consecutive empty counter."""
+        call_count = 0
+
+        def fake_get_unenriched(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 6:
+                return [_make_row(f"r{call_count}", f"a{call_count}")]
+            return []
+
+        def fake_enrich(rows, **kwargs):
+            ref_id = rows[0].reference_id
+            # Fail batches 1-2, succeed batch 3, fail batches 4-5, succeed batch 6
+            if ref_id in ("r1", "r2", "r4", "r5"):
+                return 0, [ref_id]
+            return 1, []
+
+        with (
+            patch("app.assets.seeder.dependencies_available", return_value=True),
+            patch("app.assets.seeder.sync_root_safely", return_value=set()),
+            patch("app.assets.seeder.collect_paths_for_roots", return_value=[]),
+            patch("app.assets.seeder.build_asset_specs", return_value=([], set(), 0)),
+            patch("app.assets.seeder.insert_asset_specs", return_value=0),
+            patch("app.assets.seeder.get_unenriched_assets_for_roots", side_effect=fake_get_unenriched),
+            patch("app.assets.seeder.enrich_assets_batch", side_effect=fake_enrich),
+        ):
+            fresh_seeder.start(roots=("models",), phase=ScanPhase.ENRICH)
+            fresh_seeder.wait(timeout=5.0)
+
+        # All 6 batches should run + 1 final call returning empty
+        assert call_count == 7
+        status = fresh_seeder.get_status()
+        assert status.state == State.IDLE

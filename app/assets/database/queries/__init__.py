@@ -57,6 +57,7 @@ from app.assets.database.queries.tags import (
     remove_missing_tag_for_asset_id,
     remove_tags_from_reference,
     set_reference_tags,
+    validate_tags_exist,
 )
 
 __all__ = [
@@ -114,4 +115,5 @@ __all__ = [
     "update_reference_updated_at",
     "upsert_asset",
     "upsert_reference",
+    "validate_tags_exist",
 ]

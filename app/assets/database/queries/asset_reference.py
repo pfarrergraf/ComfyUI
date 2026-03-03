@@ -660,13 +660,16 @@ def restore_references_by_paths(session: Session, file_paths: list[str]) -> int:
     if not file_paths:
         return 0
 
-    result = session.execute(
-        sa.update(AssetReference)
-        .where(AssetReference.file_path.in_(file_paths))
-        .where(AssetReference.is_missing == True)  # noqa: E712
-        .values(is_missing=False)
-    )
-    return result.rowcount
+    total = 0
+    for chunk in iter_chunks(file_paths, MAX_BIND_PARAMS):
+        result = session.execute(
+            sa.update(AssetReference)
+            .where(AssetReference.file_path.in_(chunk))
+            .where(AssetReference.is_missing == True)  # noqa: E712
+            .values(is_missing=False)
+        )
+        total += result.rowcount
+    return total
 
 
 def get_unreferenced_unhashed_asset_ids(session: Session) -> list[str]:
@@ -697,11 +700,14 @@ def delete_assets_by_ids(session: Session, asset_ids: list[str]) -> int:
     """
     if not asset_ids:
         return 0
-    session.execute(
-        sa.delete(AssetReference).where(AssetReference.asset_id.in_(asset_ids))
-    )
-    result = session.execute(sa.delete(Asset).where(Asset.id.in_(asset_ids)))
-    return result.rowcount
+    total = 0
+    for chunk in iter_chunks(asset_ids, MAX_BIND_PARAMS):
+        session.execute(
+            sa.delete(AssetReference).where(AssetReference.asset_id.in_(chunk))
+        )
+        result = session.execute(sa.delete(Asset).where(Asset.id.in_(chunk)))
+        total += result.rowcount
+    return total
 
 
 def get_references_for_prefixes(

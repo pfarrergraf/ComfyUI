@@ -44,9 +44,9 @@ from app.database.db import create_session, dependencies_available
 
 class _RefInfo(TypedDict):
     ref_id: str
-    fp: str
+    file_path: str
     exists: bool
-    fast_ok: bool
+    stat_unchanged: bool
     needs_verify: bool
 
 
@@ -75,9 +75,7 @@ def get_prefixes_for_root(root: RootType) -> list[str]:
 def get_all_known_prefixes() -> list[str]:
     """Get all known asset prefixes across all root types."""
     all_roots: tuple[RootType, ...] = ("models", "input", "output")
-    return [
-        os.path.abspath(p) for root in all_roots for p in get_prefixes_for_root(root)
-    ]
+    return [p for root in all_roots for p in get_prefixes_for_root(root)]
 
 
 def collect_models_files() -> list[str]:
@@ -110,10 +108,10 @@ def sync_references_with_filesystem(
 ) -> set[str] | None:
     """Reconcile asset references with filesystem for a root.
 
-    - Toggle needs_verify per reference using fast mtime/size check
-    - For hashed assets with at least one fast-ok ref: delete stale missing refs
+    - Toggle needs_verify per reference using mtime/size stat check
+    - For hashed assets with at least one stat-unchanged ref: delete stale missing refs
     - For seed assets with all refs missing: delete Asset and its references
-    - Optionally add/remove 'missing' tags based on fast-ok in this root
+    - Optionally add/remove 'missing' tags based on stat check in this root
     - Optionally return surviving absolute paths
 
     Args:
@@ -140,10 +138,10 @@ def sync_references_with_filesystem(
             acc = {"hash": row.asset_hash, "size_db": row.size_bytes, "refs": []}
             by_asset[row.asset_id] = acc
 
-        fast_ok = False
+        stat_unchanged = False
         try:
             exists = True
-            fast_ok = verify_file_unchanged(
+            stat_unchanged = verify_file_unchanged(
                 mtime_db=row.mtime_ns,
                 size_db=acc["size_db"],
                 stat_result=os.stat(row.file_path, follow_symlinks=True),
@@ -160,9 +158,9 @@ def sync_references_with_filesystem(
         acc["refs"].append(
             {
                 "ref_id": row.reference_id,
-                "fp": row.file_path,
+                "file_path": row.file_path,
                 "exists": exists,
-                "fast_ok": fast_ok,
+                "stat_unchanged": stat_unchanged,
                 "needs_verify": row.needs_verify,
             }
         )
@@ -177,18 +175,18 @@ def sync_references_with_filesystem(
     for aid, acc in by_asset.items():
         a_hash = acc["hash"]
         refs = acc["refs"]
-        any_fast_ok = any(r["fast_ok"] for r in refs)
+        any_unchanged = any(r["stat_unchanged"] for r in refs)
         all_missing = all(not r["exists"] for r in refs)
 
         for r in refs:
             if not r["exists"]:
                 to_mark_missing.append(r["ref_id"])
                 continue
-            if r["fast_ok"]:
+            if r["stat_unchanged"]:
                 to_clear_missing.append(r["ref_id"])
                 if r["needs_verify"]:
                     to_clear_verify.append(r["ref_id"])
-            if not r["fast_ok"] and not r["needs_verify"]:
+            if not r["stat_unchanged"] and not r["needs_verify"]:
                 to_set_verify.append(r["ref_id"])
 
         if a_hash is None:
@@ -197,10 +195,10 @@ def sync_references_with_filesystem(
             else:
                 for r in refs:
                     if r["exists"]:
-                        survivors.add(os.path.abspath(r["fp"]))
+                        survivors.add(os.path.abspath(r["file_path"]))
             continue
 
-        if any_fast_ok:
+        if any_unchanged:
             for r in refs:
                 if not r["exists"]:
                     stale_ref_ids.append(r["ref_id"])
@@ -219,7 +217,7 @@ def sync_references_with_filesystem(
 
         for r in refs:
             if r["exists"]:
-                survivors.add(os.path.abspath(r["fp"]))
+                survivors.add(os.path.abspath(r["file_path"]))
 
     delete_references_by_ids(session, stale_ref_ids)
     stale_set = set(stale_ref_ids)
@@ -348,58 +346,6 @@ def build_asset_specs(
 
     return specs, tag_pool, skipped
 
-
-def build_stub_specs(
-    paths: list[str],
-    existing_paths: set[str],
-) -> tuple[list[SeedAssetSpec], set[str], int]:
-    """Build minimal stub specs for fast phase scanning.
-
-    Only collects filesystem metadata (stat), no file content reading.
-    This is the fastest possible scan to populate the asset database.
-
-    Args:
-        paths: List of file paths to process
-        existing_paths: Set of paths that already exist in the database
-
-    Returns:
-        Tuple of (specs, tag_pool, skipped_count)
-    """
-    specs: list[SeedAssetSpec] = []
-    tag_pool: set[str] = set()
-    skipped = 0
-
-    for p in paths:
-        abs_p = os.path.abspath(p)
-        if abs_p in existing_paths:
-            skipped += 1
-            continue
-        try:
-            stat_p = os.stat(abs_p, follow_symlinks=True)
-        except OSError:
-            continue
-        if not stat_p.st_size:
-            continue
-
-        name, tags = get_name_and_tags_from_asset_path(abs_p)
-        rel_fname = compute_relative_filename(abs_p)
-
-        specs.append(
-            {
-                "abs_path": abs_p,
-                "size_bytes": stat_p.st_size,
-                "mtime_ns": get_mtime_ns(stat_p),
-                "info_name": name,
-                "tags": tags,
-                "fname": rel_fname,
-                "metadata": None,
-                "hash": None,
-                "mime_type": None,
-            }
-        )
-        tag_pool.update(tags)
-
-    return specs, tag_pool, skipped
 
 
 def insert_asset_specs(specs: list[SeedAssetSpec], tag_pool: set[str]) -> int:
@@ -538,7 +484,8 @@ def enrich_asset(
         try:
             digest = compute_blake3_hash(file_path)
             full_hash = f"blake3:{digest}"
-            if not extract_metadata or metadata:
+            metadata_ok = not extract_metadata or metadata is not None
+            if metadata_ok:
                 new_level = ENRICHMENT_HASHED
         except Exception as e:
             logging.warning("Failed to hash %s: %s", file_path, e)

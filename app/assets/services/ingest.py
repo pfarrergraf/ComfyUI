@@ -2,17 +2,16 @@ import contextlib
 import logging
 import mimetypes
 import os
-from typing import Sequence
+from typing import Any, Sequence
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import app.assets.services.hashing as hashing
-from app.assets.database.models import Asset, AssetReference, Tag
 from app.assets.database.queries import (
     add_tags_to_reference,
     fetch_reference_and_asset,
     get_asset_by_hash,
+    get_existing_asset_ids,
     get_reference_by_file_path,
     get_reference_tags,
     get_or_create_reference,
@@ -21,11 +20,13 @@ from app.assets.database.queries import (
     set_reference_tags,
     upsert_asset,
     upsert_reference,
+    validate_tags_exist,
 )
 from app.assets.helpers import normalize_tags
 from app.assets.services.file_utils import get_size_and_mtime_ns
 from app.assets.services.path_utils import (
     compute_filename_for_reference,
+    compute_relative_filename,
     resolve_destination_from_tags,
     validate_path_within_base,
 )
@@ -55,6 +56,7 @@ def _ingest_file_from_path(
     require_existing_tags: bool = False,
 ) -> IngestResult:
     locator = os.path.abspath(abs_path)
+    user_metadata = user_metadata or {}
 
     asset_created = False
     asset_updated = False
@@ -64,7 +66,7 @@ def _ingest_file_from_path(
 
     with create_session() as session:
         if preview_id:
-            if not session.get(Asset, preview_id):
+            if preview_id not in get_existing_asset_ids(session, [preview_id]):
                 preview_id = None
 
         asset, asset_created, asset_updated = upsert_asset(
@@ -94,7 +96,7 @@ def _ingest_file_from_path(
             norm = normalize_tags(list(tags))
             if norm:
                 if require_existing_tags:
-                    _validate_tags_exist(session, norm)
+                    validate_tags_exist(session, norm)
                 add_tags_to_reference(
                     session,
                     reference_id=reference_id,
@@ -106,7 +108,8 @@ def _ingest_file_from_path(
             _update_metadata_with_filename(
                 session,
                 reference_id=reference_id,
-                ref=ref,
+                file_path=ref.file_path,
+                current_metadata=ref.user_metadata,
                 user_metadata=user_metadata,
             )
 
@@ -134,6 +137,8 @@ def _register_existing_asset(
     tag_origin: str = "manual",
     owner_id: str = "",
 ) -> RegisterAssetResult:
+    user_metadata = user_metadata or {}
+
     with create_session() as session:
         asset = get_asset_by_hash(session, asset_hash=asset_hash)
         if not asset:
@@ -157,7 +162,7 @@ def _register_existing_asset(
             session.commit()
             return result
 
-        new_meta = dict(user_metadata or {})
+        new_meta = dict(user_metadata)
         computed_filename = compute_filename_for_reference(session, ref)
         if computed_filename:
             new_meta["filename"] = computed_filename
@@ -190,29 +195,20 @@ def _register_existing_asset(
         return result
 
 
-def _validate_tags_exist(session: Session, tags: list[str]) -> None:
-    existing_tag_names = set(
-        name
-        for (name,) in session.execute(select(Tag.name).where(Tag.name.in_(tags))).all()
-    )
-    missing = [t for t in tags if t not in existing_tag_names]
-    if missing:
-        raise ValueError(f"Unknown tags: {missing}")
-
 
 def _update_metadata_with_filename(
     session: Session,
     reference_id: str,
-    ref: AssetReference,
-    user_metadata: UserMetadata,
+    file_path: str | None,
+    current_metadata: dict | None,
+    user_metadata: dict[str, Any],
 ) -> None:
-    computed_filename = compute_filename_for_reference(session, ref)
+    computed_filename = compute_relative_filename(file_path) if file_path else None
 
-    current_meta = ref.user_metadata or {}
+    current_meta = current_metadata or {}
     new_meta = dict(current_meta)
-    if user_metadata:
-        for k, v in user_metadata.items():
-            new_meta[k] = v
+    for k, v in user_metadata.items():
+        new_meta[k] = v
     if computed_filename:
         new_meta["filename"] = computed_filename
 

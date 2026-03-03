@@ -1,4 +1,3 @@
-import asyncio
 import os
 from typing import IO
 
@@ -16,20 +15,6 @@ def compute_blake3_hash(
 
     with open(os.fspath(fp), "rb") as f:
         return _hash_file_obj(f, chunk_size)
-
-
-async def compute_blake3_hash_async(
-    fp: str | IO[bytes],
-    chunk_size: int = DEFAULT_CHUNK,
-) -> str:
-    if hasattr(fp, "read"):
-        return await asyncio.to_thread(compute_blake3_hash, fp, chunk_size)
-
-    def _worker() -> str:
-        with open(os.fspath(fp), "rb") as f:
-            return _hash_file_obj(f, chunk_size)
-
-    return await asyncio.to_thread(_worker)
 
 
 def _hash_file_obj(file_obj: IO, chunk_size: int = DEFAULT_CHUNK) -> str:

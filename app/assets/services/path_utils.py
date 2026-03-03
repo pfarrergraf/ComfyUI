@@ -51,8 +51,9 @@ def resolve_destination_from_tags(tags: list[str]) -> tuple[str, list[str]]:
         raw_subdirs = tags[1:]
     else:
         raise ValueError(f"unknown root tag '{tags[0]}'; expected 'models', 'input', or 'output'")
+    _sep_chars = frozenset(("/", "\\", os.sep))
     for i in raw_subdirs:
-        if i in (".", ".."):
+        if i in (".", "..") or _sep_chars & set(i):
             raise ValueError("invalid path component in tags")
 
     return base_dir, raw_subdirs if raw_subdirs else []
@@ -113,6 +114,8 @@ def get_asset_category_and_relative_path(
         return Path(child).is_relative_to(parent)
 
     def _compute_relative(child: str, parent: str) -> str:
+        # Normalize relative path, stripping any leading ".." components
+        # by anchoring to root (os.sep) then computing relpath back from it.
         return os.path.relpath(
             os.path.join(os.sep, os.path.relpath(child, parent)), os.sep
         )

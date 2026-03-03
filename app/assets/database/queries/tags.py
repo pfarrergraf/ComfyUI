@@ -37,6 +37,17 @@ class SetTagsDict(TypedDict):
     total: list[str]
 
 
+def validate_tags_exist(session: Session, tags: list[str]) -> None:
+    """Raise ValueError if any of the given tag names do not exist."""
+    existing_tag_names = set(
+        name
+        for (name,) in session.execute(select(Tag.name).where(Tag.name.in_(tags))).all()
+    )
+    missing = [t for t in tags if t not in existing_tag_names]
+    if missing:
+        raise ValueError(f"Unknown tags: {missing}")
+
+
 def ensure_tags_exist(
     session: Session, names: Iterable[str], tag_type: str = "user"
 ) -> None:
