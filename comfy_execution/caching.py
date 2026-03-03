@@ -316,14 +316,21 @@ class BasicCache:
             return ''
 
     def _build_context(self, node_id, cache_key):
-        """Build CacheContext with hash. Returns None if hashing fails on NaN."""
-        from comfy_execution.cache_provider import CacheContext, _serialize_cache_key
-        return CacheContext(
-            prompt_id=self._current_prompt_id,
-            node_id=node_id,
-            class_type=self._get_class_type(node_id),
-            cache_key_hash=_serialize_cache_key(cache_key)
-        )
+        """Build CacheContext with hash. Returns None if hashing fails."""
+        from comfy_execution.cache_provider import CacheContext, _serialize_cache_key, _logger
+        try:
+            cache_key_hash = _serialize_cache_key(cache_key)
+            if cache_key_hash is None:
+                return None
+            return CacheContext(
+                prompt_id=self._current_prompt_id,
+                node_id=node_id,
+                class_type=self._get_class_type(node_id),
+                cache_key_hash=cache_key_hash,
+            )
+        except Exception as e:
+            _logger.warning(f"Failed to build cache context for node {node_id}: {e}")
+            return None
 
     async def _ensure_subcache(self, node_id, children_ids):
         subcache_key = self.cache_key_set.get_subcache_key(node_id)

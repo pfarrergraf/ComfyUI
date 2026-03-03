@@ -242,11 +242,12 @@ def _canonicalize(obj: Any) -> Any:
         return ("__repr__", repr(obj))
 
 
-def _serialize_cache_key(cache_key: Any) -> str:
+def _serialize_cache_key(cache_key: Any) -> Optional[str]:
     """
     Serialize cache key to a hex digest string for external storage.
 
-    Returns SHA256 hex string suitable for Redis/database keys.
+    Returns SHA256 hex string suitable for Redis/database keys,
+    or None if serialization fails entirely (fail-closed).
 
     Note: Uses canonicalize + JSON serialization instead of pickle because
     pickle is NOT deterministic across Python sessions due to hash randomization
@@ -263,8 +264,9 @@ def _serialize_cache_key(cache_key: Any) -> str:
         try:
             serialized = pickle.dumps(cache_key, protocol=4)
             return hashlib.sha256(serialized).hexdigest()
-        except Exception:
-            return hashlib.sha256(str(id(cache_key)).encode()).hexdigest()
+        except Exception as fallback_error:
+            _logger.warning(f"Failed pickle fallback for cache key: {fallback_error}")
+            return None
 
 
 def _contains_nan(obj: Any) -> bool:

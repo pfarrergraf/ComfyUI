@@ -333,13 +333,13 @@ class TestCacheContext:
             prompt_id="prompt-123",
             node_id="node-456",
             class_type="KSampler",
-            cache_key_hash="abcdef1234567890" * 4,
+            cache_key_hash="a" * 64,
         )
 
         assert context.prompt_id == "prompt-123"
         assert context.node_id == "node-456"
         assert context.class_type == "KSampler"
-        assert context.cache_key_hash == "abcdef1234567890" * 4
+        assert context.cache_key_hash == "a" * 64
 
 
 class TestCacheValue:
