@@ -71,8 +71,8 @@ class PainterNode(io.ComfyNode):
     @classmethod
     def execute(cls, mask, width, height, bg_color="#000000", image=None) -> io.NodeOutput:
         if image is not None:
-            h, w = image.shape[1], image.shape[2]
-            base_image = image
+            base_image = image[:1]
+            h, w = base_image.shape[1], base_image.shape[2]
         else:
             h, w = height, width
             r, g, b = hex_to_rgb(bg_color)
