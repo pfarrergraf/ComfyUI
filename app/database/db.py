@@ -66,6 +66,25 @@ def get_db_path():
         raise ValueError(f"Unsupported database URL '{url}'.")
 
 
+def _acquire_exclusive_lock(engine, db_path):
+    """Acquire an exclusive SQLite lock to prevent multi-process access.
+
+    The lock is held for the lifetime of the connection (and thus the process).
+    A second process attempting to use the same database will fail fast at startup.
+    """
+    conn = engine.connect()
+    try:
+        conn.execute(sa.text("PRAGMA locking_mode=EXCLUSIVE"))
+        conn.execute(sa.text("BEGIN EXCLUSIVE"))
+        conn.execute(sa.text("COMMIT"))
+    except Exception:
+        raise RuntimeError(
+            f"Could not acquire exclusive lock on database '{db_path}'. "
+            "Another ComfyUI process may already be using it. "
+            "Use --database-url to specify a separate database file."
+        )
+
+
 def init_db():
     db_url = args.database_url
     logging.debug(f"Database URL: {db_url}")
@@ -77,25 +96,14 @@ def init_db():
     # Check if we need to upgrade
     engine = create_engine(db_url)
 
-    # Enable foreign key enforcement and exclusive locking for SQLite
+    # Enable foreign key enforcement for SQLite
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA locking_mode=EXCLUSIVE")
         cursor.close()
 
-    # Acquire the exclusive lock early by opening a connection and triggering a read.
-    # This prevents two processes from sharing the same database file.
     conn = engine.connect()
-    try:
-        conn.execute(sa.text("PRAGMA schema_version"))
-    except Exception:
-        raise RuntimeError(
-            f"Could not acquire exclusive lock on database '{db_path}'. "
-            "Another ComfyUI process may already be using it. "
-            "Use --database-url to specify a separate database file."
-        )
 
     context = MigrationContext.configure(conn)
     current_rev = context.get_current_revision()
@@ -123,6 +131,12 @@ def init_db():
                 os.remove(backup_path)
             logging.exception("Error upgrading database: ")
             raise e
+
+    # Acquire an exclusive lock after migrations are complete.
+    # Alembic uses its own connection, so we must wait until it's done
+    # before locking — otherwise our own lock blocks the migration.
+    conn.close()
+    _acquire_exclusive_lock(engine, db_path)
 
     global Session
     Session = sessionmaker(bind=engine)
