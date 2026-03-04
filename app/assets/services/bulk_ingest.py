@@ -17,7 +17,6 @@ from app.assets.database.queries import (
     get_reference_ids_by_ids,
     get_references_by_paths_and_asset_ids,
     get_unreferenced_unhashed_asset_ids,
-    mark_references_missing_outside_prefixes,
     restore_references_by_paths,
 )
 from app.assets.helpers import get_utc_now
@@ -264,25 +263,6 @@ def batch_insert_seed_assets(
         won_paths=len(winning_paths),
         lost_paths=len(losing_paths),
     )
-
-
-def mark_assets_missing_outside_prefixes(
-    session: Session, valid_prefixes: list[str]
-) -> int:
-    """Mark references as missing when outside valid prefixes.
-
-    This is a non-destructive operation that soft-deletes references
-    by setting is_missing=True. User metadata is preserved and assets
-    can be restored if the file reappears in a future scan.
-
-    Args:
-        session: Database session
-        valid_prefixes: List of absolute directory prefixes that are valid
-
-    Returns:
-        Number of references marked as missing
-    """
-    return mark_references_missing_outside_prefixes(session, valid_prefixes)
 
 
 def cleanup_unreferenced_assets(session: Session) -> int:

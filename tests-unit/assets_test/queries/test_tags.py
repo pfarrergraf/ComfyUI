@@ -104,9 +104,9 @@ class TestSetReferenceTags:
         result = set_reference_tags(session, reference_id=ref.id, tags=["a", "b"])
         session.commit()
 
-        assert set(result["added"]) == {"a", "b"}
-        assert result["removed"] == []
-        assert set(result["total"]) == {"a", "b"}
+        assert set(result.added) == {"a", "b"}
+        assert result.removed == []
+        assert set(result.total) == {"a", "b"}
 
     def test_removes_old_tags(self, session: Session):
         asset = _make_asset(session, "hash1")
@@ -116,9 +116,9 @@ class TestSetReferenceTags:
         result = set_reference_tags(session, reference_id=ref.id, tags=["a"])
         session.commit()
 
-        assert result["added"] == []
-        assert set(result["removed"]) == {"b", "c"}
-        assert result["total"] == ["a"]
+        assert result.added == []
+        assert set(result.removed) == {"b", "c"}
+        assert result.total == ["a"]
 
     def test_replaces_tags(self, session: Session):
         asset = _make_asset(session, "hash1")
@@ -128,9 +128,9 @@ class TestSetReferenceTags:
         result = set_reference_tags(session, reference_id=ref.id, tags=["b", "c"])
         session.commit()
 
-        assert result["added"] == ["c"]
-        assert result["removed"] == ["a"]
-        assert set(result["total"]) == {"b", "c"}
+        assert result.added == ["c"]
+        assert result.removed == ["a"]
+        assert set(result.total) == {"b", "c"}
 
 
 class TestAddTagsToReference:
@@ -141,8 +141,8 @@ class TestAddTagsToReference:
         result = add_tags_to_reference(session, reference_id=ref.id, tags=["x", "y"])
         session.commit()
 
-        assert set(result["added"]) == {"x", "y"}
-        assert result["already_present"] == []
+        assert set(result.added) == {"x", "y"}
+        assert result.already_present == []
 
     def test_reports_already_present(self, session: Session):
         asset = _make_asset(session, "hash1")
@@ -152,8 +152,8 @@ class TestAddTagsToReference:
         result = add_tags_to_reference(session, reference_id=ref.id, tags=["x", "y"])
         session.commit()
 
-        assert result["added"] == ["y"]
-        assert result["already_present"] == ["x"]
+        assert result.added == ["y"]
+        assert result.already_present == ["x"]
 
     def test_raises_for_missing_reference(self, session: Session):
         with pytest.raises(ValueError, match="not found"):
@@ -169,9 +169,9 @@ class TestRemoveTagsFromReference:
         result = remove_tags_from_reference(session, reference_id=ref.id, tags=["a", "b"])
         session.commit()
 
-        assert set(result["removed"]) == {"a", "b"}
-        assert result["not_present"] == []
-        assert result["total_tags"] == ["c"]
+        assert set(result.removed) == {"a", "b"}
+        assert result.not_present == []
+        assert result.total_tags == ["c"]
 
     def test_reports_not_present(self, session: Session):
         asset = _make_asset(session, "hash1")
@@ -181,8 +181,8 @@ class TestRemoveTagsFromReference:
         result = remove_tags_from_reference(session, reference_id=ref.id, tags=["a", "x"])
         session.commit()
 
-        assert result["removed"] == ["a"]
-        assert result["not_present"] == ["x"]
+        assert result.removed == ["a"]
+        assert result.not_present == ["x"]
 
     def test_raises_for_missing_reference(self, session: Session):
         with pytest.raises(ValueError, match="not found"):

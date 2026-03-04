@@ -17,6 +17,7 @@ from app.assets.api.schemas_in import (
     AssetValidationError,
     UploadError,
 )
+from app.assets.helpers import validate_blake3_hash
 from app.assets.api.upload import (
     delete_temp_file_if_exists,
     parse_multipart_upload,
@@ -89,6 +90,12 @@ def register_assets_routes(
     app.add_routes(ROUTES)
 
 
+def disable_assets_routes() -> None:
+    """Disable asset routes at runtime (e.g. after DB init failure)."""
+    global _ASSETS_ENABLED
+    _ASSETS_ENABLED = False
+
+
 def _build_error_response(
     status: int, code: str, message: str, details: dict | None = None
 ) -> web.Response:
@@ -116,16 +123,9 @@ def _validate_sort_field(requested: str | None) -> str:
 @_require_assets_feature_enabled
 async def head_asset_by_hash(request: web.Request) -> web.Response:
     hash_str = request.match_info.get("hash", "").strip().lower()
-    if not hash_str or ":" not in hash_str:
-        return _build_error_response(
-            400, "INVALID_HASH", "hash must be like 'blake3:<hex>'"
-        )
-    algo, digest = hash_str.split(":", 1)
-    if (
-        algo != "blake3"
-        or not digest
-        or any(c for c in digest if c not in "0123456789abcdef")
-    ):
+    try:
+        hash_str = validate_blake3_hash(hash_str)
+    except ValueError:
         return _build_error_response(
             400, "INVALID_HASH", "hash must be like 'blake3:<hex>'"
         )

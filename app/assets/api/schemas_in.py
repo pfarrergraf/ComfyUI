@@ -2,6 +2,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from app.assets.helpers import validate_blake3_hash
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -116,15 +117,7 @@ class CreateFromHashBody(BaseModel):
     @field_validator("hash")
     @classmethod
     def _require_blake3(cls, v):
-        s = (v or "").strip().lower()
-        if ":" not in s:
-            raise ValueError("hash must be 'blake3:<hex>'")
-        algo, digest = s.split(":", 1)
-        if algo != "blake3":
-            raise ValueError("only canonical 'blake3:<hex>' is accepted here")
-        if not digest or any(c for c in digest if c not in "0123456789abcdef"):
-            raise ValueError("hash digest must be lowercase hex")
-        return s
+        return validate_blake3_hash(v or "")
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -214,17 +207,10 @@ class UploadAssetSpec(BaseModel):
     def _parse_hash(cls, v):
         if v is None:
             return None
-        s = str(v).strip().lower()
+        s = str(v).strip()
         if not s:
             return None
-        if ":" not in s:
-            raise ValueError("hash must be 'blake3:<hex>'")
-        algo, digest = s.split(":", 1)
-        if algo != "blake3":
-            raise ValueError("only canonical 'blake3:<hex>' is accepted here")
-        if not digest or any(c for c in digest if c not in "0123456789abcdef"):
-            raise ValueError("hash digest must be lowercase hex")
-        return f"{algo}:{digest}"
+        return validate_blake3_hash(s)
 
     @field_validator("tags", mode="before")
     @classmethod

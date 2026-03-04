@@ -25,7 +25,6 @@ from app.assets.database.queries import (
 from app.assets.helpers import normalize_tags
 from app.assets.services.file_utils import get_size_and_mtime_ns
 from app.assets.services.path_utils import (
-    compute_filename_for_reference,
     compute_relative_filename,
     resolve_destination_from_tags,
     validate_path_within_base,
@@ -163,7 +162,7 @@ def _register_existing_asset(
             return result
 
         new_meta = dict(user_metadata)
-        computed_filename = compute_filename_for_reference(session, ref)
+        computed_filename = compute_relative_filename(ref.file_path) if ref.file_path else None
         if computed_filename:
             new_meta["filename"] = computed_filename
 

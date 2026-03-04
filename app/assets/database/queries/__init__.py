@@ -24,6 +24,7 @@ from app.assets.database.queries.asset_reference import (
     get_or_create_reference,
     get_reference_by_file_path,
     get_reference_by_id,
+    get_reference_with_owner_check,
     get_reference_ids_by_ids,
     get_references_by_paths_and_asset_ids,
     get_references_for_prefixes,
@@ -44,9 +45,9 @@ from app.assets.database.queries.asset_reference import (
     upsert_reference,
 )
 from app.assets.database.queries.tags import (
-    AddTagsDict,
-    RemoveTagsDict,
-    SetTagsDict,
+    AddTagsResult,
+    RemoveTagsResult,
+    SetTagsResult,
     add_missing_tag_for_asset_id,
     add_tags_to_reference,
     bulk_insert_tags_and_meta,
@@ -60,10 +61,10 @@ from app.assets.database.queries.tags import (
 )
 
 __all__ = [
-    "AddTagsDict",
+    "AddTagsResult",
     "CacheStateRow",
-    "RemoveTagsDict",
-    "SetTagsDict",
+    "RemoveTagsResult",
+    "SetTagsResult",
     "UnenrichedReferenceRow",
     "add_missing_tag_for_asset_id",
     "add_tags_to_reference",
@@ -87,6 +88,7 @@ __all__ = [
     "get_or_create_reference",
     "get_reference_by_file_path",
     "get_reference_by_id",
+    "get_reference_with_owner_check",
     "get_reference_ids_by_ids",
     "get_reference_tags",
     "get_references_by_paths_and_asset_ids",

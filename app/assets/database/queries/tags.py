@@ -1,4 +1,5 @@
-from typing import Iterable, Sequence, TypedDict
+from dataclasses import dataclass
+from typing import Iterable, Sequence
 
 import sqlalchemy as sa
 from sqlalchemy import delete, func, select
@@ -19,19 +20,22 @@ from app.assets.database.queries.common import (
 from app.assets.helpers import escape_sql_like_string, get_utc_now, normalize_tags
 
 
-class AddTagsDict(TypedDict):
+@dataclass(frozen=True)
+class AddTagsResult:
     added: list[str]
     already_present: list[str]
     total_tags: list[str]
 
 
-class RemoveTagsDict(TypedDict):
+@dataclass(frozen=True)
+class RemoveTagsResult:
     removed: list[str]
     not_present: list[str]
     total_tags: list[str]
 
 
-class SetTagsDict(TypedDict):
+@dataclass(frozen=True)
+class SetTagsResult:
     added: list[str]
     removed: list[str]
     total: list[str]
@@ -81,19 +85,10 @@ def set_reference_tags(
     reference_id: str,
     tags: Sequence[str],
     origin: str = "manual",
-) -> SetTagsDict:
+) -> SetTagsResult:
     desired = normalize_tags(tags)
 
-    current = set(
-        tag_name
-        for (tag_name,) in (
-            session.execute(
-                select(AssetReferenceTag.tag_name).where(
-                    AssetReferenceTag.asset_reference_id == reference_id
-                )
-            )
-        ).all()
-    )
+    current = set(get_reference_tags(session, reference_id))
 
     to_add = [t for t in desired if t not in current]
     to_remove = [t for t in current if t not in desired]
@@ -122,7 +117,7 @@ def set_reference_tags(
         )
         session.flush()
 
-    return {"added": to_add, "removed": to_remove, "total": desired}
+    return SetTagsResult(added=to_add, removed=to_remove, total=desired)
 
 
 def add_tags_to_reference(
@@ -132,7 +127,7 @@ def add_tags_to_reference(
     origin: str = "manual",
     create_if_missing: bool = True,
     reference_row: AssetReference | None = None,
-) -> AddTagsDict:
+) -> AddTagsResult:
     if not reference_row:
         ref = session.get(AssetReference, reference_id)
         if not ref:
@@ -141,21 +136,12 @@ def add_tags_to_reference(
     norm = normalize_tags(tags)
     if not norm:
         total = get_reference_tags(session, reference_id=reference_id)
-        return {"added": [], "already_present": [], "total_tags": total}
+        return AddTagsResult(added=[], already_present=[], total_tags=total)
 
     if create_if_missing:
         ensure_tags_exist(session, norm, tag_type="user")
 
-    current = {
-        tag_name
-        for (tag_name,) in (
-            session.execute(
-                sa.select(AssetReferenceTag.tag_name).where(
-                    AssetReferenceTag.asset_reference_id == reference_id
-                )
-            )
-        ).all()
-    }
+    current = set(get_reference_tags(session, reference_id))
 
     want = set(norm)
     to_add = sorted(want - current)
@@ -179,18 +165,18 @@ def add_tags_to_reference(
                 nested.rollback()
 
     after = set(get_reference_tags(session, reference_id=reference_id))
-    return {
-        "added": sorted(((after - current) & want)),
-        "already_present": sorted(want & current),
-        "total_tags": sorted(after),
-    }
+    return AddTagsResult(
+        added=sorted(((after - current) & want)),
+        already_present=sorted(want & current),
+        total_tags=sorted(after),
+    )
 
 
 def remove_tags_from_reference(
     session: Session,
     reference_id: str,
     tags: Sequence[str],
-) -> RemoveTagsDict:
+) -> RemoveTagsResult:
     ref = session.get(AssetReference, reference_id)
     if not ref:
         raise ValueError(f"AssetReference {reference_id} not found")
@@ -198,18 +184,9 @@ def remove_tags_from_reference(
     norm = normalize_tags(tags)
     if not norm:
         total = get_reference_tags(session, reference_id=reference_id)
-        return {"removed": [], "not_present": [], "total_tags": total}
+        return RemoveTagsResult(removed=[], not_present=[], total_tags=total)
 
-    existing = {
-        tag_name
-        for (tag_name,) in (
-            session.execute(
-                sa.select(AssetReferenceTag.tag_name).where(
-                    AssetReferenceTag.asset_reference_id == reference_id
-                )
-            )
-        ).all()
-    }
+    existing = set(get_reference_tags(session, reference_id))
 
     to_remove = sorted(set(t for t in norm if t in existing))
     not_present = sorted(set(t for t in norm if t not in existing))
@@ -224,7 +201,7 @@ def remove_tags_from_reference(
         session.flush()
 
     total = get_reference_tags(session, reference_id=reference_id)
-    return {"removed": to_remove, "not_present": not_present, "total_tags": total}
+    return RemoveTagsResult(removed=to_remove, not_present=not_present, total_tags=total)
 
 
 def add_missing_tag_for_asset_id(

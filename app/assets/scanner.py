@@ -1,6 +1,5 @@
 import logging
 import os
-import time
 from pathlib import Path
 from typing import Literal, TypedDict
 
@@ -16,6 +15,7 @@ from app.assets.database.queries import (
     get_asset_by_hash,
     get_references_for_prefixes,
     get_unenriched_references,
+    mark_references_missing_outside_prefixes,
     reassign_asset_references,
     remove_missing_tag_for_asset_id,
     set_reference_metadata,
@@ -24,7 +24,6 @@ from app.assets.database.queries import (
 from app.assets.services.bulk_ingest import (
     SeedAssetSpec,
     batch_insert_seed_assets,
-    mark_assets_missing_outside_prefixes,
 )
 from app.assets.services.file_utils import (
     get_mtime_ns,
@@ -39,7 +38,7 @@ from app.assets.services.path_utils import (
     get_comfy_models_folders,
     get_name_and_tags_from_asset_path,
 )
-from app.database.db import create_session, dependencies_available
+from app.database.db import create_session
 
 
 class _RefInfo(TypedDict):
@@ -257,7 +256,7 @@ def mark_missing_outside_prefixes_safely(prefixes: list[str]) -> int:
     """
     try:
         with create_session() as sess:
-            count = mark_assets_missing_outside_prefixes(sess, prefixes)
+            count = mark_references_missing_outside_prefixes(sess, prefixes)
             sess.commit()
             return count
     except Exception as e:
@@ -438,11 +437,17 @@ def enrich_asset(
     full_hash: str | None = None
     if compute_hash:
         try:
+            mtime_before = get_mtime_ns(stat_p)
             digest = compute_blake3_hash(file_path)
-            full_hash = f"blake3:{digest}"
-            metadata_ok = not extract_metadata or metadata is not None
-            if metadata_ok:
-                new_level = ENRICHMENT_HASHED
+            stat_after = os.stat(file_path, follow_symlinks=True)
+            mtime_after = get_mtime_ns(stat_after)
+            if mtime_before != mtime_after:
+                logging.warning("File modified during hashing, discarding hash: %s", file_path)
+            else:
+                full_hash = f"blake3:{digest}"
+                metadata_ok = not extract_metadata or metadata is not None
+                if metadata_ok:
+                    new_level = ENRICHMENT_HASHED
         except Exception as e:
             logging.warning("Failed to hash %s: %s", file_path, e)
 

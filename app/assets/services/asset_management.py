@@ -13,6 +13,7 @@ from app.assets.database.queries import (
     fetch_reference_asset_and_tags,
     get_asset_by_hash as queries_get_asset_by_hash,
     get_reference_by_id,
+    get_reference_with_owner_check,
     list_references_page,
     list_references_by_asset_id,
     set_reference_metadata,
@@ -23,7 +24,7 @@ from app.assets.database.queries import (
     update_reference_updated_at,
 )
 from app.assets.helpers import select_best_live_path
-from app.assets.services.path_utils import compute_filename_for_reference
+from app.assets.services.path_utils import compute_relative_filename
 from app.assets.services.schemas import (
     AssetData,
     AssetDetailResult,
@@ -67,18 +68,14 @@ def update_asset_metadata(
     owner_id: str = "",
 ) -> AssetDetailResult:
     with create_session() as session:
-        ref = get_reference_by_id(session, reference_id=reference_id)
-        if not ref:
-            raise ValueError(f"AssetReference {reference_id} not found")
-        if ref.owner_id and ref.owner_id != owner_id:
-            raise PermissionError("not owner")
+        ref = get_reference_with_owner_check(session, reference_id, owner_id)
 
         touched = False
         if name is not None and name != ref.name:
             update_reference_name(session, reference_id=reference_id, name=name)
             touched = True
 
-        computed_filename = compute_filename_for_reference(session, ref)
+        computed_filename = compute_relative_filename(ref.file_path) if ref.file_path else None
 
         new_meta: dict | None = None
         if user_metadata is not None:
@@ -183,11 +180,7 @@ def set_asset_preview(
     owner_id: str = "",
 ) -> AssetDetailResult:
     with create_session() as session:
-        ref_row = get_reference_by_id(session, reference_id=reference_id)
-        if not ref_row:
-            raise ValueError(f"AssetReference {reference_id} not found")
-        if ref_row.owner_id and ref_row.owner_id != owner_id:
-            raise PermissionError("not owner")
+        get_reference_with_owner_check(session, reference_id, owner_id)
 
         set_reference_preview(
             session,

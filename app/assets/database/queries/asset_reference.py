@@ -4,7 +4,6 @@ This module replaces the separate asset_info.py and cache_state.py query modules
 providing a unified interface for the merged asset_references table.
 """
 
-import os
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
@@ -25,6 +24,7 @@ from app.assets.database.models import (
 )
 from app.assets.database.queries.common import (
     MAX_BIND_PARAMS,
+    build_prefix_like_conditions,
     build_visible_owner_clause,
     calculate_rows_per_statement,
     iter_chunks,
@@ -163,6 +163,25 @@ def get_reference_by_id(
     reference_id: str,
 ) -> AssetReference | None:
     return session.get(AssetReference, reference_id)
+
+
+def get_reference_with_owner_check(
+    session: Session,
+    reference_id: str,
+    owner_id: str,
+) -> AssetReference:
+    """Fetch a reference and verify ownership.
+
+    Raises:
+        ValueError: if reference not found
+        PermissionError: if owner_id doesn't match
+    """
+    ref = get_reference_by_id(session, reference_id=reference_id)
+    if not ref:
+        raise ValueError(f"AssetReference {reference_id} not found")
+    if ref.owner_id and ref.owner_id != owner_id:
+        raise PermissionError("not owner")
+    return ref
 
 
 def get_reference_by_file_path(
@@ -636,12 +655,8 @@ def mark_references_missing_outside_prefixes(
     if not valid_prefixes:
         return 0
 
-    def make_prefix_condition(prefix: str):
-        base = prefix if prefix.endswith(os.sep) else prefix + os.sep
-        escaped, esc = escape_sql_like_string(base)
-        return AssetReference.file_path.like(escaped + "%", escape=esc)
-
-    matches_valid_prefix = sa.or_(*[make_prefix_condition(p) for p in valid_prefixes])
+    conds = build_prefix_like_conditions(valid_prefixes)
+    matches_valid_prefix = sa.or_(*conds)
     result = session.execute(
         sa.update(AssetReference)
         .where(AssetReference.file_path.isnot(None))
@@ -729,13 +744,7 @@ def get_references_for_prefixes(
     if not prefixes:
         return []
 
-    conds = []
-    for p in prefixes:
-        base = os.path.abspath(p)
-        if not base.endswith(os.sep):
-            base += os.sep
-        escaped, esc = escape_sql_like_string(base)
-        conds.append(AssetReference.file_path.like(escaped + "%", escape=esc))
+    conds = build_prefix_like_conditions(prefixes)
 
     query = (
         sa.select(
@@ -875,13 +884,7 @@ def get_unenriched_references(
     if not prefixes:
         return []
 
-    conds = []
-    for p in prefixes:
-        base = os.path.abspath(p)
-        if not base.endswith(os.sep):
-            base += os.sep
-        escaped, esc = escape_sql_like_string(base)
-        conds.append(AssetReference.file_path.like(escaped + "%", escape=esc))
+    conds = build_prefix_like_conditions(prefixes)
 
     query = (
         sa.select(

@@ -1,10 +1,12 @@
 from app.assets.database.queries import (
+    AddTagsResult,
+    RemoveTagsResult,
     add_tags_to_reference,
-    get_reference_by_id,
+    get_reference_with_owner_check,
     list_tags_with_usage,
     remove_tags_from_reference,
 )
-from app.assets.services.schemas import AddTagsResult, RemoveTagsResult, TagUsage
+from app.assets.services.schemas import TagUsage
 from app.database.db import create_session
 
 
@@ -15,13 +17,9 @@ def apply_tags(
     owner_id: str = "",
 ) -> AddTagsResult:
     with create_session() as session:
-        ref_row = get_reference_by_id(session, reference_id=reference_id)
-        if not ref_row:
-            raise ValueError(f"AssetReference {reference_id} not found")
-        if ref_row.owner_id and ref_row.owner_id != owner_id:
-            raise PermissionError("not owner")
+        ref_row = get_reference_with_owner_check(session, reference_id, owner_id)
 
-        data = add_tags_to_reference(
+        result = add_tags_to_reference(
             session,
             reference_id=reference_id,
             tags=tags,
@@ -31,11 +29,7 @@ def apply_tags(
         )
         session.commit()
 
-    return AddTagsResult(
-        added=data["added"],
-        already_present=data["already_present"],
-        total_tags=data["total_tags"],
-    )
+    return result
 
 
 def remove_tags(
@@ -44,24 +38,16 @@ def remove_tags(
     owner_id: str = "",
 ) -> RemoveTagsResult:
     with create_session() as session:
-        ref_row = get_reference_by_id(session, reference_id=reference_id)
-        if not ref_row:
-            raise ValueError(f"AssetReference {reference_id} not found")
-        if ref_row.owner_id and ref_row.owner_id != owner_id:
-            raise PermissionError("not owner")
+        get_reference_with_owner_check(session, reference_id, owner_id)
 
-        data = remove_tags_from_reference(
+        result = remove_tags_from_reference(
             session,
             reference_id=reference_id,
             tags=tags,
         )
         session.commit()
 
-    return RemoveTagsResult(
-        removed=data["removed"],
-        not_present=data["not_present"],
-        total_tags=data["total_tags"],
-    )
+    return result
 
 
 def list_tags(

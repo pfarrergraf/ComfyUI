@@ -52,20 +52,6 @@ class IngestResult:
     reference_id: str | None
 
 
-@dataclass(frozen=True)
-class AddTagsResult:
-    added: list[str]
-    already_present: list[str]
-    total_tags: list[str]
-
-
-@dataclass(frozen=True)
-class RemoveTagsResult:
-    removed: list[str]
-    not_present: list[str]
-    total_tags: list[str]
-
-
 class TagUsage(NamedTuple):
     name: str
     tag_type: str

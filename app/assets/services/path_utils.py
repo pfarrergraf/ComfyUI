@@ -150,16 +150,6 @@ def get_asset_category_and_relative_path(
     )
 
 
-def compute_filename_for_reference(session, ref) -> str | None:
-    """Compute the relative filename for an asset reference.
-
-    Uses the file_path from the reference if available.
-    """
-    if ref.file_path:
-        return compute_relative_filename(ref.file_path)
-    return None
-
-
 def get_name_and_tags_from_asset_path(file_path: str) -> tuple[str, list[str]]:
     """Return (name, tags) derived from a filesystem path.
 

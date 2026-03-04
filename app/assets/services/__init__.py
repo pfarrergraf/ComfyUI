@@ -12,7 +12,6 @@ from app.assets.services.bulk_ingest import (
     BulkInsertResult,
     batch_insert_seed_assets,
     cleanup_unreferenced_assets,
-    mark_assets_missing_outside_prefixes,
 )
 from app.assets.services.file_utils import (
     get_mtime_ns,
@@ -26,8 +25,11 @@ from app.assets.services.ingest import (
     create_from_hash,
     upload_from_temp_path,
 )
-from app.assets.services.schemas import (
+from app.assets.database.queries import (
     AddTagsResult,
+    RemoveTagsResult,
+)
+from app.assets.services.schemas import (
     AssetData,
     AssetDetailResult,
     AssetSummaryData,
@@ -36,7 +38,6 @@ from app.assets.services.schemas import (
     ListAssetsResult,
     ReferenceData,
     RegisterAssetResult,
-    RemoveTagsResult,
     TagUsage,
     UploadResult,
     UserMetadata,
@@ -77,7 +78,6 @@ __all__ = [
     "list_files_recursively",
     "list_tags",
     "cleanup_unreferenced_assets",
-    "mark_assets_missing_outside_prefixes",
     "remove_tags",
     "resolve_asset_for_download",
     "set_asset_preview",

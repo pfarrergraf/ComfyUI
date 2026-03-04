@@ -7,27 +7,18 @@ from aiohttp import web
 
 import folder_paths
 from app.assets.api.schemas_in import ParsedUpload, UploadError
+from app.assets.helpers import validate_blake3_hash
 
 
 def normalize_and_validate_hash(s: str) -> str:
-    """
-    Validate and normalize a hash string.
+    """Validate and normalize a hash string.
 
     Returns canonical 'blake3:<hex>' or raises UploadError.
     """
-    s = s.strip().lower()
-    if not s:
+    try:
+        return validate_blake3_hash(s)
+    except ValueError:
         raise UploadError(400, "INVALID_HASH", "hash must be like 'blake3:<hex>'")
-    if ":" not in s:
-        raise UploadError(400, "INVALID_HASH", "hash must be like 'blake3:<hex>'")
-    algo, digest = s.split(":", 1)
-    if (
-        algo != "blake3"
-        or len(digest) != 64
-        or any(c for c in digest if c not in "0123456789abcdef")
-    ):
-        raise UploadError(400, "INVALID_HASH", "hash must be like 'blake3:<hex>'")
-    return f"{algo}:{digest}"
 
 
 async def parse_multipart_upload(

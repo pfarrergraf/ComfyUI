@@ -7,6 +7,7 @@ import folder_paths
 import time
 from comfy.cli_args import args, enables_dynamic_vram
 from app.logger import setup_logger
+from app.assets.api.routes import disable_assets_routes
 from app.assets.seeder import asset_seeder
 import itertools
 import utils.extra_config
@@ -364,6 +365,9 @@ def setup_database():
                     logging.info("Background asset scan initiated for models, input, output")
     except Exception as e:
         logging.error(f"Failed to initialize database. Please ensure you have installed the latest requirements. If the error persists, please report this as in future the database will be required: {e}")
+        if args.enable_assets:
+            disable_assets_routes()
+            asset_seeder.disable()
 
 
 def start_comfyui(asyncio_loop=None):
