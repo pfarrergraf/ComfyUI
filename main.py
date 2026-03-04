@@ -10,6 +10,7 @@ from app.logger import setup_logger
 from app.assets.seeder import asset_seeder
 import itertools
 import utils.extra_config
+from utils.mime_types import init_mime_types
 import logging
 import sys
 from comfy_execution.progress import get_progress_state
@@ -162,6 +163,7 @@ def execute_prestartup_script():
         logging.info("")
 
 apply_custom_paths()
+init_mime_types()
 
 if args.enable_manager:
     comfyui_manager.prestartup()
