@@ -15,6 +15,7 @@ try:
     from alembic.runtime.migration import MigrationContext
     from alembic.script import ScriptDirectory
     from sqlalchemy import create_engine, event
+    import sqlalchemy as sa
     from sqlalchemy.orm import sessionmaker
 
     _DB_AVAILABLE = True
@@ -76,13 +77,25 @@ def init_db():
     # Check if we need to upgrade
     engine = create_engine(db_url)
 
-    # Enable foreign key enforcement for SQLite
+    # Enable foreign key enforcement and exclusive locking for SQLite
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA locking_mode=EXCLUSIVE")
         cursor.close()
+
+    # Acquire the exclusive lock early by opening a connection and triggering a read.
+    # This prevents two processes from sharing the same database file.
     conn = engine.connect()
+    try:
+        conn.execute(sa.text("PRAGMA schema_version"))
+    except Exception:
+        raise RuntimeError(
+            f"Could not acquire exclusive lock on database '{db_path}'. "
+            "Another ComfyUI process may already be using it. "
+            "Use --database-url to specify a separate database file."
+        )
 
     context = MigrationContext.configure(conn)
     current_rev = context.get_current_revision()
