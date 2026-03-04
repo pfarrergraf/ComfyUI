@@ -3,6 +3,7 @@ import os
 import shutil
 from app.logger import log_startup_warning
 from utils.install_util import get_missing_requirements_message
+from filelock import FileLock, Timeout
 from comfy.cli_args import args
 
 _DB_AVAILABLE = False
@@ -15,7 +16,6 @@ try:
     from alembic.runtime.migration import MigrationContext
     from alembic.script import ScriptDirectory
     from sqlalchemy import create_engine, event
-    import sqlalchemy as sa
     from sqlalchemy.orm import sessionmaker
 
     _DB_AVAILABLE = True
@@ -66,20 +66,22 @@ def get_db_path():
         raise ValueError(f"Unsupported database URL '{url}'.")
 
 
-def _acquire_exclusive_lock(engine, db_path):
-    """Acquire an exclusive SQLite lock to prevent multi-process access.
+_db_lock = None
 
-    The lock is held for the lifetime of the connection (and thus the process).
-    A second process attempting to use the same database will fail fast at startup.
+def _acquire_file_lock(db_path):
+    """Acquire an OS-level file lock to prevent multi-process access.
+
+    Uses filelock for cross-platform support (macOS, Linux, Windows).
+    The OS automatically releases the lock when the process exits, even on crashes.
     """
-    conn = engine.connect()
+    global _db_lock
+    lock_path = db_path + ".lock"
+    _db_lock = FileLock(lock_path)
     try:
-        conn.execute(sa.text("PRAGMA locking_mode=EXCLUSIVE"))
-        conn.execute(sa.text("BEGIN EXCLUSIVE"))
-        conn.execute(sa.text("COMMIT"))
-    except Exception:
+        _db_lock.acquire(timeout=0)
+    except Timeout:
         raise RuntimeError(
-            f"Could not acquire exclusive lock on database '{db_path}'. "
+            f"Could not acquire lock on database '{db_path}'. "
             "Another ComfyUI process may already be using it. "
             "Use --database-url to specify a separate database file."
         )
@@ -132,11 +134,11 @@ def init_db():
             logging.exception("Error upgrading database: ")
             raise e
 
-    # Acquire an exclusive lock after migrations are complete.
+    # Acquire an OS-level file lock after migrations are complete.
     # Alembic uses its own connection, so we must wait until it's done
     # before locking — otherwise our own lock blocks the migration.
     conn.close()
-    _acquire_exclusive_lock(engine, db_path)
+    _acquire_file_lock(db_path)
 
     global Session
     Session = sessionmaker(bind=engine)

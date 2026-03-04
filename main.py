@@ -7,7 +7,6 @@ import folder_paths
 import time
 from comfy.cli_args import args, enables_dynamic_vram
 from app.logger import setup_logger
-from app.assets.api.routes import disable_assets_routes
 from app.assets.seeder import asset_seeder
 import itertools
 import utils.extra_config
@@ -16,6 +15,7 @@ import sys
 from comfy_execution.progress import get_progress_state
 from comfy_execution.utils import get_executing_context
 from comfy_api import feature_flags
+from app.database.db import init_db, dependencies_available
 
 if __name__ == "__main__":
     #NOTE: These do not do anything on core ComfyUI, they are for custom nodes.
@@ -357,17 +357,30 @@ def cleanup_temp():
 
 def setup_database():
     try:
-        from app.database.db import init_db, dependencies_available
         if dependencies_available():
             init_db()
             if args.enable_assets:
                 if asset_seeder.start(roots=("models", "input", "output"), prune_first=True, compute_hashes=True):
                     logging.info("Background asset scan initiated for models, input, output")
     except Exception as e:
-        logging.error(f"Failed to initialize database. Please ensure you have installed the latest requirements. If the error persists, please report this as in future the database will be required: {e}")
+        if "database is locked" in str(e):
+            logging.error(
+                "Database is locked. Another ComfyUI process is already using this database.\n"
+                "To resolve this, specify a separate database file for this instance:\n"
+                "  --database-url sqlite:///path/to/another.db"
+            )
+            sys.exit(1)
         if args.enable_assets:
-            disable_assets_routes()
-            asset_seeder.disable()
+            logging.error(
+                f"Failed to initialize database: {e}\n"
+                "The --enable-assets flag requires a working database connection.\n"
+                "To resolve this, try one of the following:\n"
+                "  1. Install the latest requirements: pip install -r requirements.txt\n"
+                "  2. Specify an alternative database URL: --database-url sqlite:///path/to/your.db\n"
+                "  3. Use an in-memory database: --database-url sqlite:///:memory:"
+            )
+            sys.exit(1)
+        logging.error(f"Failed to initialize database. Please ensure you have installed the latest requirements. If the error persists, please report this as in future the database will be required: {e}")
 
 
 def start_comfyui(asyncio_loop=None):
