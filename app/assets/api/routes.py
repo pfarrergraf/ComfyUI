@@ -54,7 +54,9 @@ def _require_assets_feature_enabled(handler):
                 "Assets system is disabled. Start the server with --enable-assets to use this feature.",
             )
         return await handler(request)
+
     return wrapper
+
 
 # UUID regex (canonical hyphenated form, case-insensitive)
 UUID_RE = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -81,7 +83,8 @@ def get_query_dict(request: web.Request) -> dict[str, Any]:
 
 
 def register_assets_routes(
-    app: web.Application, user_manager_instance: user_manager.UserManager | None = None,
+    app: web.Application,
+    user_manager_instance: user_manager.UserManager | None = None,
 ) -> None:
     global USER_MANAGER, _ASSETS_ENABLED
     if user_manager_instance is not None:
@@ -254,15 +257,19 @@ async def download_asset_content(request: web.Request) -> web.Response:
             404, "FILE_NOT_FOUND", "Underlying file not found on disk."
         )
 
-    quoted = (filename or "").replace("\r", "").replace("\n", "").replace('"', "'")
-    encoded = urllib.parse.quote(quoted)
-    cd = f"{disposition}; filename=\"{quoted}\"; filename*=UTF-8''{encoded}"
+    safe_name = (filename or "").replace("\r", "").replace("\n", "")
+    encoded = urllib.parse.quote(safe_name)
+    cd = f"{disposition}; filename*=UTF-8''{encoded}"
 
     file_size = os.path.getsize(abs_path)
     size_mb = file_size / (1024 * 1024)
     logging.info(
         "download_asset_content: path=%s, size=%d bytes (%.2f MB), type=%s, name=%s",
-        abs_path, file_size, size_mb, content_type, filename,
+        abs_path,
+        file_size,
+        size_mb,
+        content_type,
+        filename,
     )
 
     async def stream_file_chunks():
@@ -382,8 +389,8 @@ async def upload_asset(request: web.Request) -> web.Response:
             # Otherwise, we must have a temp file path to ingest
             if not parsed.tmp_path or not os.path.exists(parsed.tmp_path):
                 return _build_error_response(
-                    404,
-                    "ASSET_NOT_FOUND",
+                    400,
+                    "MISSING_INPUT",
                     "Provided hash not found and no file uploaded.",
                 )
 
@@ -459,9 +466,7 @@ async def update_asset_route(request: web.Request) -> web.Response:
             updated_at=result.ref.updated_at,
         )
     except PermissionError as pe:
-        return _build_error_response(
-            403, "FORBIDDEN", str(pe), {"id": reference_id}
-        )
+        return _build_error_response(403, "FORBIDDEN", str(pe), {"id": reference_id})
     except ValueError as ve:
         return _build_error_response(
             404, "ASSET_NOT_FOUND", str(ve), {"id": reference_id}
@@ -482,7 +487,7 @@ async def delete_asset_route(request: web.Request) -> web.Response:
     reference_id = str(uuid.UUID(request.match_info["id"]))
     delete_content_param = request.query.get("delete_content")
     delete_content = (
-        True
+        False
         if delete_content_param is None
         else delete_content_param.lower() not in {"0", "false", "no"}
     )
@@ -577,9 +582,7 @@ async def add_asset_tags(request: web.Request) -> web.Response:
             total_tags=result.total_tags,
         )
     except PermissionError as pe:
-        return _build_error_response(
-            403, "FORBIDDEN", str(pe), {"id": reference_id}
-        )
+        return _build_error_response(403, "FORBIDDEN", str(pe), {"id": reference_id})
     except ValueError as ve:
         return _build_error_response(
             404, "ASSET_NOT_FOUND", str(ve), {"id": reference_id}
@@ -626,9 +629,7 @@ async def delete_asset_tags(request: web.Request) -> web.Response:
             total_tags=result.total_tags,
         )
     except PermissionError as pe:
-        return _build_error_response(
-            403, "FORBIDDEN", str(pe), {"id": reference_id}
-        )
+        return _build_error_response(403, "FORBIDDEN", str(pe), {"id": reference_id})
     except ValueError as ve:
         return _build_error_response(
             404, "ASSET_NOT_FOUND", str(ve), {"id": reference_id}

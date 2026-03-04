@@ -360,7 +360,9 @@ class _AssetSeeder:
         """
         with self._lock:
             if self._state != State.IDLE:
-                raise ScanInProgressError("Cannot mark missing assets while scan is running")
+                raise ScanInProgressError(
+                    "Cannot mark missing assets while scan is running"
+                )
             self._state = State.RUNNING
 
         try:
@@ -378,6 +380,7 @@ class _AssetSeeder:
         finally:
             with self._lock:
                 self._state = State.IDLE
+                self._progress = None
 
     def _is_cancelled(self) -> bool:
         """Check if cancellation has been requested."""
@@ -543,7 +546,11 @@ class _AssetSeeder:
             elapsed = time.perf_counter() - t_start
             logging.info(
                 "Scan(%s, %s) done %.3fs: created=%d enriched=%d skipped=%d",
-                roots, phase.value, elapsed, total_created, total_enriched,
+                roots,
+                phase.value,
+                elapsed,
+                total_created,
+                total_enriched,
                 skipped_existing,
             )
 
@@ -575,6 +582,7 @@ class _AssetSeeder:
                 )
             with self._lock:
                 self._state = State.IDLE
+                self._progress = None
 
     def _run_fast_phase(self, roots: tuple[RootType, ...]) -> tuple[int, int, int]:
         """Run phase 1: fast scan to create stub records.
@@ -605,7 +613,10 @@ class _AssetSeeder:
 
         # Use stub specs (no metadata extraction, no hashing)
         specs, tag_pool, skipped_existing = build_asset_specs(
-            paths, existing_paths, enable_metadata_extraction=False, compute_hashes=False,
+            paths,
+            existing_paths,
+            enable_metadata_extraction=False,
+            compute_hashes=False,
         )
         self._update_progress(skipped=skipped_existing)
 

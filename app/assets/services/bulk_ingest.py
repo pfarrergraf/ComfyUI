@@ -187,16 +187,18 @@ def batch_insert_seed_assets(
     inserted_asset_ids = get_existing_asset_ids(
         session, [r["asset_id"] for r in reference_rows]
     )
-    reference_rows = [
-        r for r in reference_rows if r["asset_id"] in inserted_asset_ids
-    ]
+    reference_rows = [r for r in reference_rows if r["asset_id"] in inserted_asset_ids]
 
     bulk_insert_references_ignore_conflicts(session, reference_rows)
     restore_references_by_paths(session, absolute_path_list)
     winning_paths = get_references_by_paths_and_asset_ids(session, path_to_asset_id)
 
-    all_paths_set = set(absolute_path_list)
-    losing_paths = all_paths_set - winning_paths
+    inserted_paths = {
+        path
+        for path in absolute_path_list
+        if path_to_asset_id[path] in inserted_asset_ids
+    }
+    losing_paths = inserted_paths - winning_paths
     lost_asset_ids = [path_to_asset_id[path] for path in losing_paths]
 
     if lost_asset_ids:

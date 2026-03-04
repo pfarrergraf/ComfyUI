@@ -1,3 +1,4 @@
+import io
 import os
 from typing import IO
 
@@ -21,12 +22,19 @@ def _hash_file_obj(file_obj: IO, chunk_size: int = DEFAULT_CHUNK) -> str:
     if chunk_size <= 0:
         chunk_size = DEFAULT_CHUNK
 
-    orig_pos = file_obj.tell()
+    seekable = getattr(file_obj, "seekable", lambda: False)()
+    orig_pos = None
+
+    if seekable:
+        try:
+            orig_pos = file_obj.tell()
+            if orig_pos != 0:
+                file_obj.seek(0)
+        except io.UnsupportedOperation:
+            seekable = False
+            orig_pos = None
 
     try:
-        if orig_pos != 0:
-            file_obj.seek(0)
-
         h = blake3()
         while True:
             chunk = file_obj.read(chunk_size)
@@ -35,4 +43,5 @@ def _hash_file_obj(file_obj: IO, chunk_size: int = DEFAULT_CHUNK) -> str:
             h.update(chunk)
         return h.hexdigest()
     finally:
-        file_obj.seek(orig_pos)
+        if seekable and orig_pos is not None:
+            file_obj.seek(orig_pos)
