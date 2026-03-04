@@ -10,6 +10,7 @@ from app.assets.database.queries import (
     reference_exists_for_asset_id,
     delete_reference_by_id,
     fetch_reference_and_asset,
+    soft_delete_reference_by_id,
     fetch_reference_asset_and_tags,
     get_asset_by_hash as queries_get_asset_by_hash,
     get_reference_by_id,
@@ -130,6 +131,14 @@ def delete_asset_reference(
     delete_content_if_orphan: bool = True,
 ) -> bool:
     with create_session() as session:
+        if not delete_content_if_orphan:
+            # Soft delete: mark the reference as deleted but keep everything
+            deleted = soft_delete_reference_by_id(
+                session, reference_id=reference_id, owner_id=owner_id
+            )
+            session.commit()
+            return deleted
+
         ref_row = get_reference_by_id(session, reference_id=reference_id)
         asset_id = ref_row.asset_id if ref_row else None
         file_path = ref_row.file_path if ref_row else None
@@ -141,7 +150,7 @@ def delete_asset_reference(
             session.commit()
             return False
 
-        if not delete_content_if_orphan or not asset_id:
+        if not asset_id:
             session.commit()
             return True
 

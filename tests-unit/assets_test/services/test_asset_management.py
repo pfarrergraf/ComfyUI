@@ -140,7 +140,7 @@ class TestUpdateAssetMetadata:
 
 
 class TestDeleteAssetReference:
-    def test_deletes_reference(self, mock_create_session, session: Session):
+    def test_soft_deletes_reference(self, mock_create_session, session: Session):
         asset = _make_asset(session)
         ref = _make_reference(session, asset)
         ref_id = ref.id
@@ -153,7 +153,11 @@ class TestDeleteAssetReference:
         )
 
         assert result is True
-        assert session.get(AssetReference, ref_id) is None
+        # Row still exists but is marked as soft-deleted
+        session.expire_all()
+        row = session.get(AssetReference, ref_id)
+        assert row is not None
+        assert row.deleted_at is not None
 
     def test_returns_false_for_nonexistent(self, mock_create_session):
         result = delete_asset_reference(

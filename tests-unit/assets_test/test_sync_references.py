@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +16,12 @@ from app.assets.database.models import (
     AssetReferenceTag,
     Base,
     Tag,
+)
+from app.assets.database.queries.asset_reference import (
+    bulk_insert_references_ignore_conflicts,
+    get_references_for_prefixes,
+    get_unenriched_references,
+    restore_references_by_paths,
 )
 from app.assets.scanner import sync_references_with_filesystem
 from app.assets.services.file_utils import get_mtime_ns
@@ -348,3 +355,128 @@ def test_no_references_is_noop(session, temp_dir):
         session.commit()
 
     assert survivors == set()
+
+
+# ---------------------------------------------------------------------------
+# Soft-delete persistence across scanner operations
+# ---------------------------------------------------------------------------
+
+def _soft_delete_ref(session: Session, ref_id: str) -> None:
+    """Mark a reference as soft-deleted (mimics the API DELETE behaviour)."""
+    ref = session.get(AssetReference, ref_id)
+    ref.deleted_at = datetime(2025, 1, 1)
+    session.flush()
+
+
+def test_soft_deleted_ref_excluded_from_get_references_for_prefixes(session, temp_dir):
+    """get_references_for_prefixes skips soft-deleted references."""
+    fp = _create_file(temp_dir, "model.bin")
+    mtime = _stat_mtime_ns(fp)
+    _make_asset(session, "a1", fp, "r1", asset_hash="blake3:abc", mtime_ns=mtime)
+    _soft_delete_ref(session, "r1")
+    session.commit()
+
+    rows = get_references_for_prefixes(session, [str(temp_dir)], include_missing=True)
+    assert len(rows) == 0
+
+
+def test_sync_does_not_resurrect_soft_deleted_ref(session, temp_dir):
+    """Scanner sync leaves soft-deleted refs untouched even when file exists on disk."""
+    fp = _create_file(temp_dir, "model.bin")
+    mtime = _stat_mtime_ns(fp)
+    _make_asset(session, "a1", fp, "r1", asset_hash="blake3:abc", mtime_ns=mtime)
+    _soft_delete_ref(session, "r1")
+    session.commit()
+
+    with patch("app.assets.scanner.get_prefixes_for_root", return_value=[str(temp_dir)]):
+        sync_references_with_filesystem(session, "models")
+        session.commit()
+
+    session.expire_all()
+    ref = session.get(AssetReference, "r1")
+    assert ref.deleted_at is not None, "soft-deleted ref must stay deleted after sync"
+
+
+def test_bulk_insert_does_not_overwrite_soft_deleted_ref(session, temp_dir):
+    """bulk_insert_references_ignore_conflicts cannot replace a soft-deleted row."""
+    fp = _create_file(temp_dir, "model.bin")
+    mtime = _stat_mtime_ns(fp)
+    _make_asset(session, "a1", fp, "r1", asset_hash="blake3:abc", mtime_ns=mtime)
+    _soft_delete_ref(session, "r1")
+    session.commit()
+
+    now = datetime.now(tz=None)
+    bulk_insert_references_ignore_conflicts(session, [
+        {
+            "id": "r_new",
+            "asset_id": "a1",
+            "file_path": fp,
+            "name": "model.bin",
+            "owner_id": "",
+            "mtime_ns": mtime,
+            "preview_id": None,
+            "user_metadata": None,
+            "created_at": now,
+            "updated_at": now,
+            "last_access_time": now,
+        }
+    ])
+    session.commit()
+
+    session.expire_all()
+    # Original row is still the soft-deleted one
+    ref = session.get(AssetReference, "r1")
+    assert ref is not None
+    assert ref.deleted_at is not None
+    # The new row was not inserted (conflict on file_path)
+    assert session.get(AssetReference, "r_new") is None
+
+
+def test_restore_references_by_paths_skips_soft_deleted(session, temp_dir):
+    """restore_references_by_paths does not clear is_missing on soft-deleted refs."""
+    fp = _create_file(temp_dir, "model.bin")
+    mtime = _stat_mtime_ns(fp)
+    _make_asset(
+        session, "a1", fp, "r1",
+        asset_hash="blake3:abc", mtime_ns=mtime, is_missing=True,
+    )
+    _soft_delete_ref(session, "r1")
+    session.commit()
+
+    restored = restore_references_by_paths(session, [fp])
+    session.commit()
+
+    assert restored == 0
+    session.expire_all()
+    ref = session.get(AssetReference, "r1")
+    assert ref.is_missing is True, "is_missing must not be cleared on soft-deleted ref"
+    assert ref.deleted_at is not None
+
+
+def test_get_unenriched_references_excludes_soft_deleted(session, temp_dir):
+    """Enrichment queries do not pick up soft-deleted references."""
+    fp = _create_file(temp_dir, "model.bin")
+    mtime = _stat_mtime_ns(fp)
+    _make_asset(session, "a1", fp, "r1", asset_hash="blake3:abc", mtime_ns=mtime)
+    _soft_delete_ref(session, "r1")
+    session.commit()
+
+    rows = get_unenriched_references(session, [str(temp_dir)], max_level=2)
+    assert len(rows) == 0
+
+
+def test_sync_ignores_soft_deleted_seed_asset(session, temp_dir):
+    """Soft-deleted seed ref is not garbage-collected even when file is missing."""
+    fp = str(temp_dir / "gone.bin")  # file does not exist
+    _make_asset(session, "seed1", fp, "r1", asset_hash=None, mtime_ns=999)
+    _soft_delete_ref(session, "r1")
+    session.commit()
+
+    with patch("app.assets.scanner.get_prefixes_for_root", return_value=[str(temp_dir)]):
+        sync_references_with_filesystem(session, "models")
+        session.commit()
+
+    session.expire_all()
+    # Asset and ref must still exist — scanner did not see the soft-deleted row
+    assert session.get(Asset, "seed1") is not None
+    assert session.get(AssetReference, "r1") is not None

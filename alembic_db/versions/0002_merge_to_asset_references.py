@@ -79,6 +79,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=False), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=False), nullable=False),
         sa.Column("last_access_time", sa.DateTime(timezone=False), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=False), nullable=True),
         sa.CheckConstraint(
             "(mtime_ns IS NULL) OR (mtime_ns >= 0)", name="ck_ar_mtime_nonneg"
         ),
@@ -104,6 +105,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_asset_references_owner_name", "asset_references", ["owner_id", "name"]
     )
+    op.create_index("ix_asset_references_deleted_at", "asset_references", ["deleted_at"])
 
     # Create asset_reference_tags table
     op.create_table(
@@ -188,6 +190,7 @@ def downgrade() -> None:
     op.drop_index("ix_asset_reference_tags_tag_name", table_name="asset_reference_tags")
     op.drop_table("asset_reference_tags")
 
+    op.drop_index("ix_asset_references_deleted_at", table_name="asset_references")
     op.drop_index("ix_asset_references_owner_name", table_name="asset_references")
     op.drop_index("ix_asset_references_last_access_time", table_name="asset_references")
     op.drop_index("ix_asset_references_created_at", table_name="asset_references")

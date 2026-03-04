@@ -212,7 +212,7 @@ def asset_factory(http: requests.Session, api_base: str):
 
     for aid in created:
         with contextlib.suppress(Exception):
-            http.delete(f"{api_base}/api/assets/{aid}", timeout=30)
+            http.delete(f"{api_base}/api/assets/{aid}?delete_content=true", timeout=30)
 
 
 @pytest.fixture
@@ -258,4 +258,4 @@ def autoclean_unit_test_assets(http: requests.Session, api_base: str):
             break
         for aid in ids:
             with contextlib.suppress(Exception):
-                http.delete(f"{api_base}/api/assets/{aid}", timeout=30)
+                http.delete(f"{api_base}/api/assets/{aid}?delete_content=true", timeout=30)

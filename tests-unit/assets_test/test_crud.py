@@ -42,8 +42,8 @@ def test_get_and_delete_asset(http: requests.Session, api_base: str, seeded_asse
     assert "user_metadata" in detail
     assert "filename" in detail["user_metadata"]
 
-    # DELETE
-    rd = http.delete(f"{api_base}/api/assets/{aid}", timeout=120)
+    # DELETE (hard delete to also remove underlying asset and file)
+    rd = http.delete(f"{api_base}/api/assets/{aid}?delete_content=true", timeout=120)
     assert rd.status_code == 204
 
     # GET again -> 404
@@ -51,6 +51,35 @@ def test_get_and_delete_asset(http: requests.Session, api_base: str, seeded_asse
     body = rg2.json()
     assert rg2.status_code == 404
     assert body["error"]["code"] == "ASSET_NOT_FOUND"
+
+
+def test_soft_delete_hides_from_get(http: requests.Session, api_base: str, seeded_asset: dict):
+    aid = seeded_asset["id"]
+    asset_hash = seeded_asset["asset_hash"]
+
+    # Soft-delete (default, no delete_content param)
+    rd = http.delete(f"{api_base}/api/assets/{aid}", timeout=120)
+    assert rd.status_code == 204
+
+    # GET by reference ID -> 404 (soft-deleted references are hidden)
+    rg = http.get(f"{api_base}/api/assets/{aid}", timeout=120)
+    assert rg.status_code == 404
+
+    # Asset identity is preserved (underlying content still exists)
+    rh = http.head(f"{api_base}/api/assets/hash/{asset_hash}", timeout=120)
+    assert rh.status_code == 200
+
+    # Soft-deleted reference should not appear in listings
+    rl = http.get(
+        f"{api_base}/api/assets",
+        params={"include_tags": "unit-tests", "limit": "500"},
+        timeout=120,
+    )
+    ids = [a["id"] for a in rl.json().get("assets", [])]
+    assert aid not in ids
+
+    # Clean up: hard-delete the soft-deleted reference and orphaned asset
+    http.delete(f"{api_base}/api/assets/{aid}?delete_content=true", timeout=120)
 
 
 def test_delete_upon_reference_count(
@@ -70,21 +99,32 @@ def test_delete_upon_reference_count(
     assert copy["asset_hash"] == src_hash
     assert copy["created_new"] is False
 
-    # Delete original reference -> asset identity must remain
+    # Soft-delete original reference (default) -> asset identity must remain
     aid1 = seeded_asset["id"]
     rd1 = http.delete(f"{api_base}/api/assets/{aid1}", timeout=120)
     assert rd1.status_code == 204
 
     rh1 = http.head(f"{api_base}/api/assets/hash/{src_hash}", timeout=120)
-    assert rh1.status_code == 200  # identity still present
+    assert rh1.status_code == 200  # identity still present (second ref exists)
 
-    # Delete the last reference with default semantics -> identity and cached files removed
+    # Soft-delete the last reference -> asset identity preserved (no hard delete)
     aid2 = copy["id"]
     rd2 = http.delete(f"{api_base}/api/assets/{aid2}", timeout=120)
     assert rd2.status_code == 204
 
     rh2 = http.head(f"{api_base}/api/assets/hash/{src_hash}", timeout=120)
-    assert rh2.status_code == 404  # orphan content removed
+    assert rh2.status_code == 200  # asset identity preserved (soft delete)
+
+    # Re-associate via from-hash, then hard-delete -> orphan content removed
+    r3 = http.post(f"{api_base}/api/assets/from-hash", json=payload, timeout=120)
+    assert r3.status_code == 201, r3.json()
+    aid3 = r3.json()["id"]
+
+    rd3 = http.delete(f"{api_base}/api/assets/{aid3}?delete_content=true", timeout=120)
+    assert rd3.status_code == 204
+
+    rh3 = http.head(f"{api_base}/api/assets/hash/{src_hash}", timeout=120)
+    assert rh3.status_code == 404  # orphan content removed
 
 
 def test_update_asset_fields(http: requests.Session, api_base: str, seeded_asset: dict):
