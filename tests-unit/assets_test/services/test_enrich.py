@@ -1,6 +1,5 @@
 """Tests for asset enrichment (mime_type and hash population)."""
 from pathlib import Path
-from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
@@ -58,23 +57,14 @@ class TestEnrichAsset:
         )
         session.commit()
 
-        with patch("app.assets.scanner.create_session") as mock_cs:
-            from contextlib import contextmanager
-
-            @contextmanager
-            def _create_session():
-                with Session(db_engine) as sess:
-                    yield sess
-
-            mock_cs.side_effect = _create_session
-
-            new_level = enrich_asset(
-                file_path=str(file_path),
-                reference_id=ref.id,
-                asset_id=asset.id,
-                extract_metadata=True,
-                compute_hash=False,
-            )
+        new_level = enrich_asset(
+            session,
+            file_path=str(file_path),
+            reference_id=ref.id,
+            asset_id=asset.id,
+            extract_metadata=True,
+            compute_hash=False,
+        )
 
         assert new_level == ENRICHMENT_METADATA
 
@@ -95,23 +85,14 @@ class TestEnrichAsset:
         )
         session.commit()
 
-        with patch("app.assets.scanner.create_session") as mock_cs:
-            from contextlib import contextmanager
-
-            @contextmanager
-            def _create_session():
-                with Session(db_engine) as sess:
-                    yield sess
-
-            mock_cs.side_effect = _create_session
-
-            new_level = enrich_asset(
-                file_path=str(file_path),
-                reference_id=ref.id,
-                asset_id=asset.id,
-                extract_metadata=True,
-                compute_hash=True,
-            )
+        new_level = enrich_asset(
+            session,
+            file_path=str(file_path),
+            reference_id=ref.id,
+            asset_id=asset.id,
+            extract_metadata=True,
+            compute_hash=True,
+        )
 
         assert new_level == ENRICHMENT_HASHED
 
@@ -133,23 +114,14 @@ class TestEnrichAsset:
         )
         session.commit()
 
-        with patch("app.assets.scanner.create_session") as mock_cs:
-            from contextlib import contextmanager
-
-            @contextmanager
-            def _create_session():
-                with Session(db_engine) as sess:
-                    yield sess
-
-            mock_cs.side_effect = _create_session
-
-            enrich_asset(
-                file_path=str(file_path),
-                reference_id=ref.id,
-                asset_id=asset.id,
-                extract_metadata=True,
-                compute_hash=True,
-            )
+        enrich_asset(
+            session,
+            file_path=str(file_path),
+            reference_id=ref.id,
+            asset_id=asset.id,
+            extract_metadata=True,
+            compute_hash=True,
+        )
 
         session.expire_all()
         updated_asset = session.get(Asset, "asset-3")
@@ -169,23 +141,14 @@ class TestEnrichAsset:
         )
         session.commit()
 
-        with patch("app.assets.scanner.create_session") as mock_cs:
-            from contextlib import contextmanager
-
-            @contextmanager
-            def _create_session():
-                with Session(db_engine) as sess:
-                    yield sess
-
-            mock_cs.side_effect = _create_session
-
-            new_level = enrich_asset(
-                file_path=str(file_path),
-                reference_id=ref.id,
-                asset_id=asset.id,
-                extract_metadata=True,
-                compute_hash=True,
-            )
+        new_level = enrich_asset(
+            session,
+            file_path=str(file_path),
+            reference_id=ref.id,
+            asset_id=asset.id,
+            extract_metadata=True,
+            compute_hash=True,
+        )
 
         assert new_level == ENRICHMENT_STUB
 
@@ -212,31 +175,23 @@ class TestEnrichAsset:
         )
         session.commit()
 
-        with patch("app.assets.scanner.create_session") as mock_cs:
-            from contextlib import contextmanager
+        enrich_asset(
+            session,
+            file_path=str(file_path_1),
+            reference_id=ref1.id,
+            asset_id=asset1.id,
+            extract_metadata=True,
+            compute_hash=True,
+        )
 
-            @contextmanager
-            def _create_session():
-                with Session(db_engine) as sess:
-                    yield sess
-
-            mock_cs.side_effect = _create_session
-
-            enrich_asset(
-                file_path=str(file_path_1),
-                reference_id=ref1.id,
-                asset_id=asset1.id,
-                extract_metadata=True,
-                compute_hash=True,
-            )
-
-            enrich_asset(
-                file_path=str(file_path_2),
-                reference_id=ref2.id,
-                asset_id=asset2.id,
-                extract_metadata=True,
-                compute_hash=True,
-            )
+        enrich_asset(
+            session,
+            file_path=str(file_path_2),
+            reference_id=ref2.id,
+            asset_id=asset2.id,
+            extract_metadata=True,
+            compute_hash=True,
+        )
 
         session.expire_all()
 
