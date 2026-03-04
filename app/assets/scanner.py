@@ -360,50 +360,6 @@ def insert_asset_specs(specs: list[SeedAssetSpec], tag_pool: set[str]) -> int:
         return result.inserted_refs
 
 
-def seed_assets(
-    roots: tuple[RootType, ...],
-    enable_logging: bool = False,
-    compute_hashes: bool = False,
-) -> None:
-    """Scan the given roots and seed the assets into the database.
-
-    Args:
-        roots: Tuple of root types to scan (models, input, output)
-        enable_logging: If True, log progress and completion messages
-        compute_hashes: If True, compute blake3 hashes (slow for large files)
-
-    Note: This function does not mark missing assets.
-    Call mark_missing_outside_prefixes_safely separately if cleanup is needed.
-    """
-    if not dependencies_available():
-        if enable_logging:
-            logging.warning("Database dependencies not available, skipping assets scan")
-        return
-
-    t_start = time.perf_counter()
-
-    existing_paths: set[str] = set()
-    for r in roots:
-        existing_paths.update(sync_root_safely(r))
-
-    paths = collect_paths_for_roots(roots)
-    specs, tag_pool, skipped_existing = build_asset_specs(
-        paths, existing_paths, compute_hashes=compute_hashes
-    )
-    created = insert_asset_specs(specs, tag_pool)
-
-    if enable_logging:
-        logging.info(
-            "Assets scan(roots=%s) completed in %.3fs "
-            "(created=%d, skipped_existing=%d, total_seen=%d)",
-            roots,
-            time.perf_counter() - t_start,
-            created,
-            skipped_existing,
-            len(paths),
-        )
-
-
 # Enrichment level constants
 ENRICHMENT_STUB = 0  # Fast scan: path, size, mtime only
 ENRICHMENT_METADATA = 1  # Metadata extracted (safetensors header, mime type)

@@ -20,7 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 
 from app.assets.helpers import get_utc_now
-from app.database.models import Base, to_dict
+from app.database.models import Base
 
 
 class Asset(Base):
@@ -58,9 +58,6 @@ class Asset(Base):
         Index("ix_assets_mime_type", "mime_type"),
         CheckConstraint("size_bytes >= 0", name="ck_assets_size_nonneg"),
     )
-
-    def to_dict(self, include_none: bool = False) -> dict[str, Any]:
-        return to_dict(self, include_none=include_none)
 
     def __repr__(self) -> str:
         return f"<Asset id={self.id} hash={(self.hash or '')[:12]}>"
@@ -160,11 +157,6 @@ class AssetReference(Base):
             name="ck_ar_enrichment_level_range",
         ),
     )
-
-    def to_dict(self, include_none: bool = False) -> dict[str, Any]:
-        data = to_dict(self, include_none=include_none)
-        data["tags"] = [t.name for t in self.tags]
-        return data
 
     def __repr__(self) -> str:
         path_part = f" path={self.file_path!r}" if self.file_path else ""

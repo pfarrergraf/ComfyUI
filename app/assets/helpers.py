@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from typing import Literal, Sequence
+from typing import Sequence
 
 
 def select_best_live_path(states: Sequence) -> str:
@@ -21,13 +21,6 @@ def select_best_live_path(states: Sequence) -> str:
         if not getattr(s, "needs_verify", False):
             return s.file_path
     return alive[0].file_path
-
-
-ALLOWED_ROOTS: tuple[Literal["models", "input", "output"], ...] = (
-    "models",
-    "input",
-    "output",
-)
 
 
 def escape_sql_like_string(s: str, escape: str = "!") -> tuple[str, str]:

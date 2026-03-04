@@ -625,6 +625,10 @@ async def delete_asset_tags(request: web.Request) -> web.Response:
             not_present=result.not_present,
             total_tags=result.total_tags,
         )
+    except PermissionError as pe:
+        return _build_error_response(
+            403, "FORBIDDEN", str(pe), {"id": reference_id}
+        )
     except ValueError as ve:
         return _build_error_response(
             404, "ASSET_NOT_FOUND", str(ve), {"id": reference_id}

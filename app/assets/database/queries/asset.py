@@ -134,7 +134,7 @@ def reassign_asset_references(
     Used when merging a stub asset into an existing asset with the same hash.
     """
     ref = session.get(AssetReference, reference_id)
-    if ref:
+    if ref and ref.asset_id == from_asset_id:
         ref.asset_id = to_asset_id
 
     session.flush()

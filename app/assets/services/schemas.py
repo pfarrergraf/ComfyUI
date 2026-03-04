@@ -66,13 +66,6 @@ class RemoveTagsResult:
     total_tags: list[str]
 
 
-@dataclass(frozen=True)
-class SetTagsResult:
-    added: list[str]
-    removed: list[str]
-    total: list[str]
-
-
 class TagUsage(NamedTuple):
     name: str
     tag_type: str

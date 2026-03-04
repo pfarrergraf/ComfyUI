@@ -3,8 +3,7 @@ from pathlib import Path
 from typing import Literal
 
 import folder_paths
-from app.assets.database.queries import list_references_by_asset_id
-from app.assets.helpers import normalize_tags, select_best_live_path
+from app.assets.helpers import normalize_tags
 
 
 _NON_MODEL_FOLDER_NAMES = frozenset({"custom_nodes"})
@@ -159,14 +158,6 @@ def compute_filename_for_reference(session, ref) -> str | None:
     if ref.file_path:
         return compute_relative_filename(ref.file_path)
     return None
-
-
-def compute_filename_for_asset(session, asset_id: str) -> str | None:
-    """Compute the relative filename for an asset from its best live reference path."""
-    primary_path = select_best_live_path(
-        list_references_by_asset_id(session, asset_id=asset_id)
-    )
-    return compute_relative_filename(primary_path) if primary_path else None
 
 
 def get_name_and_tags_from_asset_path(file_path: str) -> tuple[str, list[str]]:

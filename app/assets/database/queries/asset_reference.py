@@ -552,7 +552,7 @@ class CacheStateRow(NamedTuple):
     needs_verify: bool
     asset_id: str
     asset_hash: str | None
-    size_bytes: int
+    size_bytes: int | None
 
 
 def list_references_by_asset_id(
@@ -767,7 +767,7 @@ def get_references_for_prefixes(
             needs_verify=row[3],
             asset_id=row[4],
             asset_hash=row[5],
-            size_bytes=int(row[6] or 0),
+            size_bytes=int(row[6]) if row[6] is not None else None,
         )
         for row in rows
     ]
@@ -782,12 +782,15 @@ def bulk_update_needs_verify(
     """
     if not reference_ids:
         return 0
-    result = session.execute(
-        sa.update(AssetReference)
-        .where(AssetReference.id.in_(reference_ids))
-        .values(needs_verify=value)
-    )
-    return result.rowcount
+    total = 0
+    for chunk in iter_chunks(reference_ids, MAX_BIND_PARAMS):
+        result = session.execute(
+            sa.update(AssetReference)
+            .where(AssetReference.id.in_(chunk))
+            .values(needs_verify=value)
+        )
+        total += result.rowcount
+    return total
 
 
 def bulk_update_is_missing(
@@ -799,12 +802,15 @@ def bulk_update_is_missing(
     """
     if not reference_ids:
         return 0
-    result = session.execute(
-        sa.update(AssetReference)
-        .where(AssetReference.id.in_(reference_ids))
-        .values(is_missing=value)
-    )
-    return result.rowcount
+    total = 0
+    for chunk in iter_chunks(reference_ids, MAX_BIND_PARAMS):
+        result = session.execute(
+            sa.update(AssetReference)
+            .where(AssetReference.id.in_(chunk))
+            .values(is_missing=value)
+        )
+        total += result.rowcount
+    return total
 
 
 def delete_references_by_ids(session: Session, reference_ids: list[str]) -> int:
@@ -814,25 +820,30 @@ def delete_references_by_ids(session: Session, reference_ids: list[str]) -> int:
     """
     if not reference_ids:
         return 0
-    result = session.execute(
-        sa.delete(AssetReference).where(AssetReference.id.in_(reference_ids))
-    )
-    return result.rowcount
+    total = 0
+    for chunk in iter_chunks(reference_ids, MAX_BIND_PARAMS):
+        result = session.execute(
+            sa.delete(AssetReference).where(AssetReference.id.in_(chunk))
+        )
+        total += result.rowcount
+    return total
 
 
 def delete_orphaned_seed_asset(session: Session, asset_id: str) -> bool:
     """Delete a seed asset (hash is None) and its references.
 
-    Returns: True if asset was deleted, False if not found
+    Returns: True if asset was deleted, False if not found or has a hash
     """
+    asset = session.get(Asset, asset_id)
+    if not asset:
+        return False
+    if asset.hash is not None:
+        return False
     session.execute(
         sa.delete(AssetReference).where(AssetReference.asset_id == asset_id)
     )
-    asset = session.get(Asset, asset_id)
-    if asset:
-        session.delete(asset)
-        return True
-    return False
+    session.delete(asset)
+    return True
 
 
 class UnenrichedReferenceRow(NamedTuple):
@@ -897,19 +908,6 @@ def get_unenriched_references(
         )
         for row in rows
     ]
-
-
-def update_enrichment_level(
-    session: Session,
-    reference_id: str,
-    level: int,
-) -> None:
-    """Update the enrichment level for a reference."""
-    session.execute(
-        sa.update(AssetReference)
-        .where(AssetReference.id == reference_id)
-        .values(enrichment_level=level)
-    )
 
 
 def bulk_update_enrichment_level(

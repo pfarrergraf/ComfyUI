@@ -31,14 +31,6 @@ class AssetValidationError(Exception):
         self.message = message
 
 
-class AssetNotFoundError(Exception):
-    """Asset or asset content not found."""
-
-    def __init__(self, message: str):
-        super().__init__(message)
-        self.message = message
-
-
 @dataclass
 class ParsedUpload:
     """Result of parsing a multipart upload request."""

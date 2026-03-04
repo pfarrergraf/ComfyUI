@@ -88,6 +88,7 @@ class _AssetSeeder:
         self._roots: tuple[RootType, ...] = ()
         self._phase: ScanPhase = ScanPhase.FULL
         self._compute_hashes: bool = False
+        self._prune_first: bool = False
         self._progress_callback: ProgressCallback | None = None
         self._disabled: bool = False
 
@@ -95,11 +96,6 @@ class _AssetSeeder:
         """Disable the asset seeder, preventing any scans from starting."""
         self._disabled = True
         logging.info("Asset seeder disabled")
-
-    def enable(self) -> None:
-        """Enable the asset seeder, allowing scans to start."""
-        self._disabled = False
-        logging.info("Asset seeder enabled")
 
     def is_disabled(self) -> bool:
         """Check if the asset seeder is disabled."""
@@ -282,7 +278,7 @@ class _AssetSeeder:
             prev_roots = self._roots
             prev_phase = self._phase
             prev_callback = self._progress_callback
-            prev_prune = getattr(self, "_prune_first", False)
+            prev_prune = self._prune_first
             prev_hashes = self._compute_hashes
 
         self.cancel()
@@ -449,10 +445,13 @@ class _AssetSeeder:
             except Exception:
                 pass
 
+    _MAX_ERRORS = 200
+
     def _add_error(self, message: str) -> None:
-        """Add an error message (thread-safe)."""
+        """Add an error message (thread-safe), capped at _MAX_ERRORS."""
         with self._lock:
-            self._errors.append(message)
+            if len(self._errors) < self._MAX_ERRORS:
+                self._errors.append(message)
 
     def _log_scan_config(self, roots: tuple[RootType, ...]) -> None:
         """Log the directories that will be scanned."""
