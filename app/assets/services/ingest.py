@@ -244,7 +244,7 @@ def upload_from_temp_path(
     expected_hash: str | None = None,
 ) -> UploadResult:
     try:
-        digest = hashing.compute_blake3_hash(temp_path)
+        digest, _ = hashing.compute_blake3_hash(temp_path)
     except ImportError as e:
         raise DependencyMissingError(str(e))
     except Exception as e:
