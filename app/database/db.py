@@ -17,6 +17,10 @@ try:
     from alembic.script import ScriptDirectory
     from sqlalchemy import create_engine, event
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.database.models import Base
+    import app.assets.database.models  # noqa: F401 — register models with Base.metadata
 
     _DB_AVAILABLE = True
 except ImportError as e:
@@ -87,9 +91,48 @@ def _acquire_file_lock(db_path):
         )
 
 
+def _is_memory_db(db_url):
+    """Check if the database URL refers to an in-memory SQLite database."""
+    return db_url in ("sqlite:///:memory:", "sqlite://")
+
+
 def init_db():
     db_url = args.database_url
     logging.debug(f"Database URL: {db_url}")
+
+    if _is_memory_db(db_url):
+        _init_memory_db(db_url)
+    else:
+        _init_file_db(db_url)
+
+
+def _init_memory_db(db_url):
+    """Initialize an in-memory SQLite database using metadata.create_all.
+
+    Alembic migrations don't work with in-memory SQLite because each
+    connection gets its own separate database — tables created by Alembic's
+    internal connection are lost immediately.
+    """
+    engine = create_engine(
+        db_url,
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    Base.metadata.create_all(engine)
+
+    global Session
+    Session = sessionmaker(bind=engine)
+
+
+def _init_file_db(db_url):
+    """Initialize a file-backed SQLite database using Alembic migrations."""
     db_path = get_db_path()
     db_exists = os.path.exists(db_path)
 
