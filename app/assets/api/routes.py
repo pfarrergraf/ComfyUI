@@ -257,6 +257,13 @@ async def download_asset_content(request: web.Request) -> web.Response:
             404, "FILE_NOT_FOUND", "Underlying file not found on disk."
         )
 
+    _DANGEROUS_MIME_TYPES = {
+        "text/html", "text/html-sandboxed", "application/xhtml+xml",
+        "text/javascript", "text/css",
+    }
+    if content_type in _DANGEROUS_MIME_TYPES:
+        content_type = "application/octet-stream"
+
     safe_name = (filename or "").replace("\r", "").replace("\n", "")
     encoded = urllib.parse.quote(safe_name)
     cd = f"{disposition}; filename*=UTF-8''{encoded}"
@@ -287,6 +294,7 @@ async def download_asset_content(request: web.Request) -> web.Response:
         headers={
             "Content-Disposition": cd,
             "Content-Length": str(file_size),
+            "X-Content-Type-Options": "nosniff",
         },
     )
 

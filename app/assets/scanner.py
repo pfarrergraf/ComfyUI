@@ -412,8 +412,8 @@ def enrich_asset(
         asset_id: ID of the asset to update (for mime_type and hash)
         extract_metadata: If True, extract safetensors header and mime type
         compute_hash: If True, compute blake3 hash
-        interrupt_check: Optional callable that may block (e.g. while paused)
-            and returns True if the operation should be cancelled
+        interrupt_check: Optional non-blocking callable that returns True if
+            the operation should be interrupted (e.g. paused or cancelled)
         hash_checkpoints: Optional dict for saving/restoring hash progress
             across interruptions, keyed by file path
 
@@ -446,14 +446,20 @@ def enrich_asset(
     if compute_hash:
         try:
             mtime_before = get_mtime_ns(stat_p)
+            size_before = stat_p.st_size
 
             # Restore checkpoint if available and file unchanged
             checkpoint = None
             if hash_checkpoints is not None:
                 checkpoint = hash_checkpoints.get(file_path)
-                if checkpoint is not None and mtime_before != get_mtime_ns(stat_p):
-                    checkpoint = None
-                    hash_checkpoints.pop(file_path, None)
+                if checkpoint is not None:
+                    cur_stat = os.stat(file_path, follow_symlinks=True)
+                    if (checkpoint.mtime_ns != get_mtime_ns(cur_stat)
+                            or checkpoint.file_size != cur_stat.st_size):
+                        checkpoint = None
+                        hash_checkpoints.pop(file_path, None)
+                    else:
+                        mtime_before = get_mtime_ns(cur_stat)
 
             digest, new_checkpoint = compute_blake3_hash(
                 file_path,
@@ -464,6 +470,8 @@ def enrich_asset(
             if digest is None:
                 # Interrupted — save checkpoint for later resumption
                 if hash_checkpoints is not None and new_checkpoint is not None:
+                    new_checkpoint.mtime_ns = mtime_before
+                    new_checkpoint.file_size = size_before
                     hash_checkpoints[file_path] = new_checkpoint
                 return new_level
 
@@ -522,8 +530,8 @@ def enrich_assets_batch(
         rows: List of UnenrichedReferenceRow from get_unenriched_assets_for_roots
         extract_metadata: If True, extract metadata for each asset
         compute_hash: If True, compute hash for each asset
-        interrupt_check: Optional callable that may block (e.g. while paused)
-            and returns True if the operation should be cancelled
+        interrupt_check: Optional non-blocking callable that returns True if
+            the operation should be interrupted (e.g. paused or cancelled)
         hash_checkpoints: Optional dict for saving/restoring hash progress
             across interruptions, keyed by file path
 
@@ -555,6 +563,7 @@ def enrich_assets_batch(
                     failed_ids.append(row.reference_id)
             except Exception as e:
                 logging.warning("Failed to enrich %s: %s", row.file_path, e)
+                sess.rollback()
                 failed_ids.append(row.reference_id)
 
     return enriched, failed_ids

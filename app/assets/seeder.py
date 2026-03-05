@@ -80,6 +80,7 @@ class _AssetSeeder:
         self._lock = threading.Lock()
         self._state = State.IDLE
         self._progress: Progress | None = None
+        self._last_progress: Progress | None = None
         self._errors: list[str] = []
         self._thread: threading.Thread | None = None
         self._cancel_event = threading.Event()
@@ -315,15 +316,16 @@ class _AssetSeeder:
     def get_status(self) -> ScanStatus:
         """Get the current status and progress of the seeder."""
         with self._lock:
+            src = self._progress or self._last_progress
             return ScanStatus(
                 state=self._state,
                 progress=Progress(
-                    scanned=self._progress.scanned,
-                    total=self._progress.total,
-                    created=self._progress.created,
-                    skipped=self._progress.skipped,
+                    scanned=src.scanned,
+                    total=src.total,
+                    created=src.created,
+                    skipped=src.skipped,
                 )
-                if self._progress
+                if src
                 else None,
                 errors=list(self._errors),
             )
@@ -379,12 +381,23 @@ class _AssetSeeder:
             return marked
         finally:
             with self._lock:
+                self._last_progress = self._progress
                 self._state = State.IDLE
                 self._progress = None
 
     def _is_cancelled(self) -> bool:
         """Check if cancellation has been requested."""
         return self._cancel_event.is_set()
+
+    def _is_paused_or_cancelled(self) -> bool:
+        """Non-blocking check: True if paused or cancelled.
+
+        Use as interrupt_check for I/O-bound work (e.g. hashing) so that
+        file handles are released immediately on pause rather than held
+        open while blocked. The caller is responsible for blocking on
+        _check_pause_and_cancel() afterward.
+        """
+        return not self._run_gate.is_set() or self._cancel_event.is_set()
 
     def _check_pause_and_cancel(self) -> bool:
         """Block while paused, then check if cancelled.
@@ -581,6 +594,7 @@ class _AssetSeeder:
                     },
                 )
             with self._lock:
+                self._last_progress = self._progress
                 self._state = State.IDLE
                 self._progress = None
 
@@ -745,7 +759,7 @@ class _AssetSeeder:
                 unenriched,
                 extract_metadata=True,
                 compute_hash=self._compute_hashes,
-                interrupt_check=self._check_pause_and_cancel,
+                interrupt_check=self._is_paused_or_cancelled,
                 hash_checkpoints=hash_checkpoints,
             )
             total_enriched += enriched

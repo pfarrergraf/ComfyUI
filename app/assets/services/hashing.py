@@ -16,6 +16,8 @@ class HashCheckpoint:
 
     bytes_processed: int
     hasher: Any  # blake3 hasher instance
+    mtime_ns: int = 0
+    file_size: int = 0
 
 
 def compute_blake3_hash(
@@ -29,8 +31,9 @@ def compute_blake3_hash(
     Args:
         fp: File path or file-like object
         chunk_size: Size of chunks to read at a time
-        interrupt_check: Optional callable that may block (e.g. while paused)
-            and returns True if the operation should be cancelled. Checked
+        interrupt_check: Optional callable that returns True if the operation
+            should be interrupted (e.g. paused or cancelled). Must be
+            non-blocking so file handles are released immediately. Checked
             between chunk reads.
         checkpoint: Optional checkpoint to resume from (file paths only)
 
