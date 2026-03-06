@@ -1,0 +1,231 @@
+﻿{
+  "90": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "91": {
+    "inputs": {
+      "text": "low quality, blurry, artifacts, watermark, subtitles, distorted anatomy, duplicate limbs, deformed face",
+      "clip": [
+        "90",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "92": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "93": {
+    "inputs": {
+      "shift": 7,
+      "model": [
+        "101",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "94": {
+    "inputs": {
+      "shift": 8,
+      "model": [
+        "102",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "95": {
+    "inputs": {
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 12,
+      "cfg": 4,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 6,
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "94",
+        0
+      ],
+      "positive": [
+        "99",
+        0
+      ],
+      "negative": [
+        "91",
+        0
+      ],
+      "latent_image": [
+        "96",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)"
+    }
+  },
+  "96": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": 1,
+      "steps": 12,
+      "cfg": 3.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 6,
+      "return_with_leftover_noise": "enable",
+      "model": [
+        "93",
+        0
+      ],
+      "positive": [
+        "99",
+        0
+      ],
+      "negative": [
+        "91",
+        0
+      ],
+      "latent_image": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)"
+    }
+  },
+  "97": {
+    "inputs": {
+      "samples": [
+        "95",
+        0
+      ],
+      "vae": [
+        "92",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "98": {
+    "inputs": {
+      "filename_prefix": "devotional_pipeline/video/default",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "100",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  },
+  "99": {
+    "inputs": {
+      "text": "cinematic devotional sunrise scene",
+      "clip": [
+        "90",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "100": {
+    "inputs": {
+      "fps": 24,
+      "images": [
+        "97",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "Create Video"
+    }
+  },
+  "101": {
+    "inputs": {
+      "unet_name": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "102": {
+    "inputs": {
+      "unet_name": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "104": {
+    "inputs": {
+      "width": 832,
+      "height": 480,
+      "length": 49,
+      "batch_size": 1
+    },
+    "class_type": "EmptyHunyuanLatentVideo",
+    "_meta": {
+      "title": "EmptyHunyuanLatentVideo"
+    }
+  },
+  "200": {
+    "inputs": {
+      "input_text": "{\"project\":\"devotional_series\",\"style_preset\":\"cinematic_devotional\",\"clips\":[{\"id\":\"clip_001\",\"route\":\"wan22_t2v\",\"video_prompt\":\"A cinematic sunrise valley devotional scene\",\"negative_prompt\":\"low quality, artifacts, watermark\",\"image_prompt\":\"sunrise valley\",\"duration_seconds\":2.0,\"audio\":{\"speakers\":[{\"id\":\"speaker_1\",\"text\":\"Hope rises with the dawn.\",\"voice\":\"warm_male\"}],\"ambient\":[{\"type\":\"wind\"}],\"music\":{\"mood\":\"gentle worship pads\",\"volume_db\":-18},\"sfx\":[{\"type\":\"soft bell\"}]}}]}",
+      "mode": "json",
+      "index": 0,
+      "run_index": 0,
+      "run_total": 1,
+      "project_override": "",
+      "date_override": ""
+    },
+    "class_type": "gaistreich_BatchDevotionalEpisodeIterator",
+    "_meta": {
+      "title": "Devotional Episode Iterator"
+    }
+  }
+}

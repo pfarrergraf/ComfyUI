@@ -1,0 +1,48 @@
+{
+  "5": {
+    "inputs": {
+      "preview": "",
+      "previewMode": null,
+      "source": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Preview as Text"
+    }
+  },
+  "7": {
+    "inputs": {
+      "prompt": "/no_think Theme: __THEME__. Return minified JSON only, no prose, no markdown. Keys: project, style_preset, clips. clips must be an array with exactly 8 objects. Each clip object must include id, route, video_prompt, negative_prompt, image_prompt, duration_seconds, audio. Set route=wan22_t2v and duration_seconds=5.0 for every clip. video_prompt must include explicit camera movement (dolly/orbit/crane/push/pull/locked-pan), subject movement, environment movement. audio must include speakers[1]{id,text,voice}, ambient[1]{type}, music{mood,volume_db}, sfx[1]{type}. Write speaker text in German and keep it devotional, concrete and emotional.",
+      "max_length": 2048,
+      "sampling_mode": "on",
+      "sampling_mode.temperature": 0.45,
+      "sampling_mode.top_k": 48,
+      "sampling_mode.top_p": 0.9,
+      "sampling_mode.min_p": 0.0,
+      "sampling_mode.repetition_penalty": 1.05,
+      "sampling_mode.seed": 0,
+      "clip": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "TextGenerate",
+    "_meta": {
+      "title": "TextGenerate"
+    }
+  },
+  "8": {
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "ltxv",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  }
+}

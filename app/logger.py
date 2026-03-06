@@ -14,7 +14,10 @@ class LogInterceptor(io.TextIOWrapper):
     def __init__(self, stream,  *args, **kwargs):
         buffer = stream.buffer
         encoding = stream.encoding
-        super().__init__(buffer, *args, **kwargs, encoding=encoding, line_buffering=stream.line_buffering)
+        # Keep startup logs resilient on Windows consoles that default to cp1252.
+        # Some custom nodes print emoji/non-ASCII text, which can otherwise raise
+        # UnicodeEncodeError and break startup while reporting other errors.
+        super().__init__(buffer, *args, **kwargs, encoding=encoding, errors="replace", line_buffering=stream.line_buffering)
         self._lock = threading.Lock()
         self._flush_callbacks = []
         self._logs_since_flush = []
